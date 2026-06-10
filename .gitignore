@@ -1,0 +1,45 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Database
+data/*.db
+data/*.db-shm
+data/*.db-wal
+
+# 녹화/녹음 파일
+play_records/*.mp4
+play_records/*.avi
+play_records/*.mkv
+play_records/error/
+
+# 진단 리포트
+diagnostics_report.html
+FIX_PROMPT.md
+
+# Claude / OMC 내부 파일
+.claude/
+.omc/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 로그
+*.log
