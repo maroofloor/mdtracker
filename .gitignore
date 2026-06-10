@@ -26,6 +26,10 @@ play_records/error/
 diagnostics_report.html
 FIX_PROMPT.md
 
+# 내부 문서
+docs/
+tests/
+
 # Claude / OMC 내부 파일
 .claude/
 .omc/
