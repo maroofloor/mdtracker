@@ -779,6 +779,22 @@ class RecordView(QWidget):
 
     # ── OCR ──────────────────────────────────────────────────────
 
+    def _show_tesseract_install_guide(self) -> None:
+        """Tesseract 설치 안내 탭(settings_view)을 열거나 설치 URL을 연다."""
+        try:
+            from ..ui.main_window import MainWindow as _MW
+            parent = self.parent()
+            while parent and not isinstance(parent, _MW):
+                parent = parent.parent()
+            if parent:
+                # 설정 탭으로 이동 (index 2)
+                parent._nav.setCurrentRow(2)
+                return
+        except Exception:
+            pass
+        import webbrowser
+        webbrowser.open("https://github.com/UB-Mannheim/tesseract/wiki")
+
     def _init_ocr_availability(self) -> None:
         try:
             from pathlib import Path

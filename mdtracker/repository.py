@@ -189,4 +189,21 @@ class DeckRepository:
             "UPDATE decks SET name=? WHERE id=?", (new_name, deck_id))
         self.conn.execute(
             "UPDATE matches SET my_deck=? WHERE my_deck=?", (new_name, old_name))
-        sel
+        self.conn.execute(
+            "UPDATE matches SET opponent_deck=? WHERE opponent_deck=?",
+            (new_name, old_name))
+        self.conn.commit()
+
+    def delete(self, deck_id: int) -> None:
+        self.conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
+        self.conn.commit()
+
+    def delete_all(self) -> None:
+        self.conn.execute("DELETE FROM decks")
+        self.conn.commit()
+
+    def canonical_match(self, raw: str, cutoff: float = 0.6) -> Optional[str]:
+        """OCR 원문을 등록된 canonical 명칭에 퍼지 매칭. 실패 시 None."""
+        names = self.list_names()
+        hit = difflib.get_close_matches(raw, names, n=1, cutoff=cutoff)
+        return hit[0] if hit else None

@@ -1,7 +1,0 @@
-{
-  "tool_name": "PowerShell",
-  "tool_input_preview": "{\"command\":\"& \\\"F:\\\\AI\\\\mdtracker\\\\.venv\\\\Scripts\\\\python.exe\\\" -c \\\"import pytesseract; pytesseract.pytesseract.tesseract_cmd = r'C:\\\\Program Files\\\\Tesseract-OCR\\\\tesseract.exe'; print(pytesseract.g...",
-  "error": "Exit code 1\n& : The term 'F:\\AI\\mdtracker\\.venv\\Scripts\\python.exe' is not recognized as the name of a cmdlet, function, script file, or operable program. Check the spelling of the name, or if a path was included, verify that the path is correct an\r\nd try again.\r\nAt line:1 char:3\r\n+ & \"F:\\AI\\mdtracker\\.venv\\Scripts\\python.exe\" -c \"import pytesseract;  ...\r\n+   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\r\n    + CategoryInfo          : ObjectNotFound: (F:\\AI\\mdtracker\\.venv\\Scripts\\python.exe:Strin...",
-  "timestamp": "2026-06-09T01:54:12.300Z",
-  "retry_count": 2
-}

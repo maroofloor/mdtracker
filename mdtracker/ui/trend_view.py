@@ -42,24 +42,10 @@ class TrendView(QWidget):
             ax.setTextPen(pg.mkPen(TEXT2))
         layout.addWidget(self.plot)
 
-        self.count_plot = pg.PlotWidget()
-        self.count_plot.setBackground(BG)
-        self.count_plot.setMaximumHeight(90)
-        self.count_plot.setLabel("left", "게임 수")
-        self.count_plot.showGrid(x=False, y=True, alpha=0.3)
-        for axis in ("left", "bottom"):
-            ax = self.count_plot.getAxis(axis)
-            ax.setPen(pg.mkPen(BORDER))
-            ax.setTextPen(pg.mkPen(TEXT2))
-        self.count_plot.getAxis("bottom").hide()
-        self.count_plot.setXLink(self.plot)
-        layout.addWidget(self.count_plot)
-
     def refresh(self) -> None:
         t = stats.trend_series(self._matches())
         points = t["points"]
         self.plot.clear()
-        self.count_plot.clear()
         if points:
             # X축을 날짜 ordinal로 — 점들의 실제 시간 간격을 반영
             def _ord(p) -> int:
@@ -78,34 +64,6 @@ class TrendView(QWidget):
             # 틱 레이블: ordinal → MM/DD
             ticks = [(x, points[i]["date"][5:]) for i, x in enumerate(xs)]
             self.plot.getAxis("bottom").setTicks([ticks])
-
-            # 일별 게임 수 바 차트
-            counts = [p["n"] for p in points]
-            bars = pg.BarGraphItem(x=xs, height=counts, width=0.7,
-                                   brush="#1565c0", pen=pg.mkPen(None))
-            self.count_plot.addItem(bars)
-
-        # 랭크 변경 시점 수직선 오버레이
-        rank_history = t.get("rank_history", [])
-        seen: set[str] = set()
-        for entry in rank_history:
-            date_str = entry["date"]
-            label = entry["rank_label"] or ""
-            if date_str in seen or not label:
-                continue
-            seen.add(date_str)
-            try:
-                x_ord = _date.fromisoformat(date_str).toordinal()
-            except Exception:
-                continue
-            line = pg.InfiniteLine(
-                pos=x_ord, angle=90,
-                pen=pg.mkPen("#f59e0b", width=1, style=pg.QtCore.Qt.DashLine),
-                label=label,
-                labelOpts={"color": "#f59e0b", "position": 0.95,
-                           "fill": (0, 0, 0, 100)},
-            )
-            self.plot.addItem(line)
 
         streak = t["current_streak"]
         if streak["type"] == "win":

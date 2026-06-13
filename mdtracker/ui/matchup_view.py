@@ -75,16 +75,6 @@ class _MatchupCard(QFrame):
         layout.addWidget(rate_lbl)
         layout.addWidget(detail_lbl)
 
-        # 표본 부족 경고 (3건 미만)
-        if cell["n"] < 3:
-            warn_lbl = QLabel(f"⚠ 표본 {cell['n']}건")
-            warn_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            warn_lbl.setStyleSheet(
-                "color: #fbbf24; font-size: 9px; font-weight: 600; "
-                "background: rgba(0,0,0,40); border-radius: 3px; "
-                "padding: 1px 4px; border: none;")
-            layout.addWidget(warn_lbl)
-
 
 class MatchupView(QWidget):
     def __init__(self, db, matches_provider=None) -> None:

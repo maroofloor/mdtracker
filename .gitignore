@@ -29,4 +29,27 @@ play_records/error/
 
 # 진단 리포트
 diagnostics_report.html
-FIX_PROMPT.
+FIX_PROMPT.md
+
+# 내부 문서
+docs/
+tests/
+
+# Claude / OMC 내부 파일
+CLAUDE.md
+.claude/
+.omc/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# 로그
+*.log
