@@ -210,6 +210,7 @@ class KpiView(QWidget):
 
     def refresh(self) -> None:
         all_matches, today = self._period_matches()
+        s_all = stats.win_rate_summary([])  # 빈 데이터셋 기본값 (NameError 방어)
 
         for card, ms in zip(self._cards, [all_matches, today]):
             s = stats.win_rate_summary(ms)

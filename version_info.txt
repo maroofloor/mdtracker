@@ -1,0 +1,38 @@
+# UTF-8
+#
+# Windows 실행 파일 버전 리소스
+# PyInstaller가 version_info.txt 로 읽어 .exe 속성에 삽입한다.
+# CI에서 sed/PowerShell로 filevers / prodvers 를 자동 갱신한다.
+
+VSVersionInfo(
+  ffi=FixedFileInfo(
+    filevers=(0, 1, 0, 0),
+    prodvers=(0, 1, 0, 0),
+    mask=0x3f,
+    flags=0x0,
+    OS=0x40004,
+    fileType=0x1,
+    subtype=0x0,
+    date=(0, 0)
+  ),
+  kids=[
+    StringFileInfo(
+      [
+        StringTable(
+          '041204b0',
+          [
+            StringStruct('CompanyName',      'MDTracker'),
+            StringStruct('FileDescription',  'Yu-Gi-Oh! Master Duel 전적 트래커'),
+            StringStruct('FileVersion',      '0.1.0'),
+            StringStruct('InternalName',     'MDTracker'),
+            StringStruct('LegalCopyright',   ''),
+            StringStruct('OriginalFilename', 'MDTracker.exe'),
+            StringStruct('ProductName',      'MDTracker'),
+            StringStruct('ProductVersion',   '0.1.0'),
+          ]
+        )
+      ]
+    ),
+    VarFileInfo([VarStruct('Translation', [0x0412, 0x04b0])])
+  ]
+)

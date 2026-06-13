@@ -177,6 +177,23 @@ class DeckRepository:
         ).fetchone()
         return row["id"]
 
+    def rename(self, deck_id: int, new_name: str) -> None:
+        """덱 이름을 변경하고 matches 테이블 참조도 일괄 갱신한다."""
+        old_row = self.conn.execute(
+            "SELECT name FROM decks WHERE id=?", (deck_id,)
+        ).fetchone()
+        if old_row is None:
+            return
+        old_name = old_row["name"]
+        self.conn.execute(
+            "UPDATE decks SET name=? WHERE id=?", (new_name, deck_id))
+        self.conn.execute(
+            "UPDATE matches SET my_deck=? WHERE my_deck=?", (new_name, old_name))
+        self.conn.execute(
+            "UPDATE matches SET opponent_deck=? WHERE opponent_deck=?",
+            (new_name, old_name))
+        self.conn.commit()
+
     def delete(self, deck_id: int) -> None:
         self.conn.execute("DELETE FROM decks WHERE id = ?", (deck_id,))
         self.conn.commit()

@@ -55,6 +55,11 @@ def main() -> None:
     win = MainWindow(db)
     win.show()
 
+    # 자동 업데이트 확인 (PyInstaller 빌드에서만 동작, 개발 환경 무시)
+    if "--no-update" not in sys.argv:
+        from mdtracker.updater import check_update_async
+        check_update_async(parent=win)
+
     # --check: 윈도우만 띄우고 즉시 종료 (헤드리스 구성 검증용)
     if "--check" in sys.argv:
         print("[mdtracker] 메인 윈도우 구성 성공")

@@ -145,3 +145,37 @@ class FilterBar(QWidget):
             combo.setCurrentIndex(0)
             combo.blockSignals(False)
         self.changed.emit()
+
+    def get_state(self) -> dict:
+        """현재 필터 상태를 dict로 반환 (탭 간 동기화용)."""
+        return {
+            "period":   self.period.currentIndex(),
+            "my_deck":  self.my_deck.currentData(),
+            "opp_deck": self.opp_deck.currentData(),
+            "event":    self.event.currentIndex(),
+            "result":   self.result.currentIndex(),
+            "coin":     self.coin.currentIndex(),
+            "toss":     self.toss.currentIndex(),
+        }
+
+    def apply_state(self, state: dict) -> None:
+        """get_state()로 얻은 dict를 적용하고 changed를 1회 발행."""
+        def _set_index(combo: QComboBox, key: str) -> None:
+            combo.blockSignals(True)
+            combo.setCurrentIndex(state.get(key, 0))
+            combo.blockSignals(False)
+
+        def _set_data(combo: QComboBox, key: str) -> None:
+            combo.blockSignals(True)
+            idx = combo.findData(state.get(key))
+            combo.setCurrentIndex(idx if idx >= 0 else 0)
+            combo.blockSignals(False)
+
+        _set_index(self.period, "period")
+        _set_data(self.my_deck, "my_deck")
+        _set_data(self.opp_deck, "opp_deck")
+        _set_index(self.event, "event")
+        _set_index(self.result, "result")
+        _set_index(self.coin, "coin")
+        _set_index(self.toss, "toss")
+        self.changed.emit()

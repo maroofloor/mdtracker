@@ -101,3 +101,14 @@ mdtracker/
 - `ocr_config.json` (루트): tesseract 경로, 모니터 번호, 피드백 URL 등 환경별 OCR 설정
 - `app_settings` (DB): 세션 간 UI 상태 영속 (`Database.get_setting`/`set_setting`)
 - `QSettings("MDTracker", "MDTracker")`: 창 크기·UI 스케일 영속
+
+## GitHub & 버전 관리
+
+Git 커밋, 브랜치 생성, 버전 태그, 릴리스, PR 작업을 할 때는 반드시 아래 문서를 참고한다:
+
+- **`docs/github_versioning_plan.html`** — 브랜치 전략, 커밋 메시지 규칙(Conventional Commits), 버전 관리(SemVer), 릴리스 마일스톤, 이슈 레이블 규칙 정의
+
+주요 규칙 요약:
+- 브랜치: `main`(안정) / `develop`(통합) / `feat·fix·chore·docs·refactor` 접두사
+- 커밋: `<type>(<scope>): <subject>` 형식
+- 버전: `MAJOR.MINOR.PATCH` (SemVer), 태그는 `v1.0.0` 형식

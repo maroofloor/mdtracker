@@ -85,7 +85,7 @@ class OcrConfig:
     )
 
     # --- 피드백 ---
-    feedback_form_url: str = ""             # Google Form URL (빈 문자열이면 비활성)
+    feedback_form_url: str = "https://github.com/maroofloor/mdtracker/issues"  # 기본 피드백 URL
 
     # ---- 직렬화 ----
     def to_json(self, path: str | Path) -> None:

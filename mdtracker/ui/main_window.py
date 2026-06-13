@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, overload, runtime_checkable
+from typing import Protocol, runtime_checkable
 
-from PySide6.QtCore import QRectF, QSize, QSettings, Qt
+from PySide6.QtCore import QRectF, QSize, QSettings, Qt, QTimer
 from PySide6.QtGui import QFont, QIcon, QPainterPath, QRegion
 from PySide6.QtWidgets import (
     QApplication,
@@ -28,8 +28,6 @@ from .sidebar import Sidebar
 from .title_bar import TitleBar
 
 _CORNER_RADIUS = 10
-_ASPECT_WIDTH = 3
-_ASPECT_HEIGHT = 2
 
 
 @runtime_checkable
@@ -75,7 +73,6 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(900, 600)
 
         self._current_scale: float = 1.0
-        self._aspect_resize_pending = False
 
         self.record_view    = RecordView(db)
         self.dashboard_view = DashboardView(db)
@@ -92,7 +89,7 @@ class MainWindow(QMainWindow):
 
         self.sidebar.nav_changed.connect(self._on_nav_changed)
         self.record_view.data_changed.connect(self.dashboard_view.refresh)
-        self.settings_view.size_changed.connect(self._resize_preserving_aspect)
+        self.settings_view.size_changed.connect(lambda w, h: self.resize(w, h))
         self.settings_view.scale_changed.connect(self._apply_ui_scale)
 
         # 콘텐츠 영역 (사이드바 + 스택)
@@ -124,9 +121,31 @@ class MainWindow(QMainWindow):
         self.stack.setCurrentIndex(0)
         self._load_settings()
 
+        # 앱 시작 3초 후 백그라운드 업데이트 확인 (네트워크 오류 시 조용히 무시)
+        QTimer.singleShot(3000, self._bg_update_check)
+
+    def _bg_update_check(self) -> None:
+        try:
+            from ..updater import check_update_async
+            check_update_async(parent=self)
+        except Exception:
+            pass
+
     # ── 네비게이션 ───────────────────────────────────────────────────
 
     def _on_nav_changed(self, index: int) -> None:
+        prev = self.stack.currentIndex()
+        # 기록(0) ↔ 대시보드(1) 탭 전환 시 필터바 상태 동기화
+        if prev != index:
+            try:
+                if prev == 0 and index == 1:
+                    state = self.record_view.filter_bar.get_state()
+                    self.dashboard_view.filter_bar.apply_state(state)
+                elif prev == 1 and index == 0:
+                    state = self.dashboard_view.filter_bar.get_state()
+                    self.record_view.filter_bar.apply_state(state)
+            except Exception:
+                pass
         self.stack.setCurrentIndex(index)
         widget = self.stack.currentWidget()
         if isinstance(widget, _Refreshable):
@@ -134,34 +153,7 @@ class MainWindow(QMainWindow):
 
     # ── 라운드 모서리 + 리사이즈 ────────────────────────────────────
 
-    @overload
-    def resize(self, width: QSize) -> None: ...
-
-    @overload
-    def resize(self, width: int, height: int) -> None: ...
-
-    def resize(self, width: int | QSize, height: int | None = None) -> None:
-        if isinstance(width, QSize):
-            size = self._aspect_size(width.width(), width.height())
-        elif height is not None:
-            size = self._aspect_size(width, height)
-        else:
-            return
-        super().resize(size)
-
     def resizeEvent(self, event) -> None:
-        corrected = self._aspect_size(
-            event.size().width(),
-            event.size().height(),
-            event.oldSize().width(),
-            event.oldSize().height(),
-        )
-        if not self._aspect_resize_pending and corrected != event.size():
-            self._aspect_resize_pending = True
-            self.resize(corrected)
-            self._aspect_resize_pending = False
-            return
-
         super().resizeEvent(event)
         path = QPainterPath()
         path.addRoundedRect(QRectF(self.rect()), _CORNER_RADIUS, _CORNER_RADIUS)
@@ -172,35 +164,6 @@ class MainWindow(QMainWindow):
                 self.width() - resize_grip.width() - 3,
                 self.height() - resize_grip.height() - 3,
             )
-
-    def _aspect_size(
-        self,
-        width: int,
-        height: int,
-        old_width: int = -1,
-        old_height: int = -1,
-    ) -> QSize:
-        min_size = self.minimumSize()
-        width = max(width, min_size.width())
-        height = max(height, min_size.height())
-        if width * _ASPECT_HEIGHT == height * _ASPECT_WIDTH:
-            return QSize(width, height)
-
-        width_changed = (
-            old_width < 0
-            or abs(width - old_width) >= abs(height - old_height)
-        )
-        if width_changed:
-            height = max(min_size.height(), round(width * _ASPECT_HEIGHT / _ASPECT_WIDTH))
-        else:
-            height = max(height, min_size.height())
-        if height % _ASPECT_HEIGHT:
-            height += _ASPECT_HEIGHT - (height % _ASPECT_HEIGHT)
-        width = height * _ASPECT_WIDTH // _ASPECT_HEIGHT
-        return QSize(width, height)
-
-    def _resize_preserving_aspect(self, width: int, height: int) -> None:
-        self.resize(self._aspect_size(width, height))
 
     # ── UI 스케일 ────────────────────────────────────────────────────
 
@@ -234,7 +197,7 @@ class MainWindow(QMainWindow):
         s.setValue("window_width",  self.width())
         s.setValue("window_height", self.height())
 
-    # ── 종료 ─────────────────────────────────────────────────────────
+    # ── 종료 ─────────────────────────────────────────────────────────────
 
     def closeEvent(self, event) -> None:
         self._save_settings()

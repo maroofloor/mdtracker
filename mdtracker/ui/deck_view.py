@@ -55,7 +55,11 @@ class DeckView(QWidget):
             "border-radius: 8px; padding: 6px 12px;")
         self.add_btn = QPushButton("+ 추가")
         self.add_btn.setStyleSheet(f"background: {ACCENT}; {_BTN}")
+        self.mine_check = QCheckBox("내 덱")
+        self.mine_check.setChecked(True)
+        self.mine_check.setStyleSheet(f"color: {TEXT2};")
         add_row.addWidget(self.name_edit, 1)
+        add_row.addWidget(self.mine_check)
         add_row.addWidget(self.add_btn)
         root.addLayout(add_row)
 
@@ -67,7 +71,7 @@ class DeckView(QWidget):
         # ── 테이블 (선택 / 덱 이름 / 내 덱) ──────────────────────
         self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(["선택", "덱 이름", "내 덱"])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
         self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -118,25 +122,28 @@ class DeckView(QWidget):
             for row, d in enumerate(decks):
                 row_bg = QColor(SURFACE) if row % 2 else QColor(SURFACE2)
 
-                # 선택 체크박스
+                # 선택 체크박스 (편집 불가)
                 sel_item = QTableWidgetItem()
                 sel_item.setCheckState(Qt.Unchecked)
                 sel_item.setTextAlignment(Qt.AlignCenter)
                 sel_item.setBackground(row_bg)
+                sel_item.setFlags(sel_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 0, sel_item)
 
-                # 덱 이름
+                # 덱 이름 (더블클릭 인라인 편집 가능)
                 name_item = QTableWidgetItem(d.name)
                 name_item.setData(Qt.UserRole, d.id)
                 name_item.setForeground(QColor(TEXT))
                 name_item.setBackground(row_bg)
+                name_item.setToolTip("더블클릭하여 이름 편집")
                 self.table.setItem(row, 1, name_item)
 
-                # 내 덱 체크박스
+                # 내 덱 체크박스 (편집 불가 — 클릭으로 토글)
                 mine_item = QTableWidgetItem()
                 mine_item.setCheckState(Qt.Checked if d.is_mine else Qt.Unchecked)
                 mine_item.setTextAlignment(Qt.AlignCenter)
                 mine_item.setBackground(row_bg)
+                mine_item.setFlags(mine_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
                 self.table.setItem(row, 2, mine_item)
         finally:
             self._loading = False
@@ -150,16 +157,28 @@ class DeckView(QWidget):
             self.table.setRowHidden(row, hide)
 
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
-        if self._loading or item.column() != 2:
+        if self._loading:
             return
-        id_item = self.table.item(item.row(), 1)
-        if not id_item:
-            return
-        deck_id = id_item.data(Qt.UserRole)
-        if deck_id is None:
-            return
-        self.db.decks.set_mine(deck_id, item.checkState() == Qt.Checked)
-        self.refresh()
+        col = item.column()
+        if col == 2:
+            # 내 덱 체크박스 토글
+            id_item = self.table.item(item.row(), 1)
+            if not id_item:
+                return
+            deck_id = id_item.data(Qt.UserRole)
+            if deck_id is None:
+                return
+            self.db.decks.set_mine(deck_id, item.checkState() == Qt.Checked)
+            self.refresh()
+        elif col == 1:
+            # 덱 이름 인라인 편집
+            deck_id = item.data(Qt.UserRole)
+            new_name = item.text().strip()
+            if deck_id is None or not new_name:
+                self.refresh()
+                return
+            self.db.decks.rename(deck_id, new_name)
+            self.refresh()
 
     def _checked_ids(self) -> list[int]:
         ids = []
@@ -179,7 +198,7 @@ class DeckView(QWidget):
         name = self.name_edit.text().strip()
         if not name:
             return
-        self.db.decks.add(name, is_mine=False)
+        self.db.decks.add(name, is_mine=self.mine_check.isChecked())
         self.name_edit.clear()
         self.refresh()
 

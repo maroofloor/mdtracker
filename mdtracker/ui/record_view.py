@@ -86,7 +86,7 @@ _C_TEXT3 = "#475569"
 _ROLE_MATCH_ID = int(Qt.ItemDataRole.UserRole)
 _ROLE_NEEDS_REVIEW = _ROLE_MATCH_ID + 1
 _ROLE_RESULT_BAR = _ROLE_MATCH_ID + 2
-_OCR_IDLE_DETAIL = "코인토스 화면 대기"
+_OCR_IDLE_DETAIL = "코인토스 화면 대기 중…"
 
 
 def _command_has_process(command: list[str], needle: str) -> bool:
@@ -325,6 +325,95 @@ class DeckComboDelegate(QStyledItemDelegate):
         model.setData(index, editor.currentText().strip(), Qt.ItemDataRole.EditRole)
 
 
+class _UndoToast(QWidget):
+    """전체 삭제 후 5초간 표시되는 Undo 토스트 위젯."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self._backup: list = []
+        self._db = None
+        self._timer = QTimer(self)
+        self._timer.setSingleShot(True)
+        self._timer.timeout.connect(self._expire)
+        self._countdown = QTimer(self)
+        self._countdown.setInterval(1000)
+        self._countdown.timeout.connect(self._tick)
+        self._remaining = 5
+
+        self.setStyleSheet(
+            "background: #1e293b; border: 1px solid #334155; border-radius: 6px;")
+
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(12, 6, 12, 6)
+        lay.setSpacing(10)
+        self._lbl = QLabel()
+        self._lbl.setStyleSheet(
+            "color: #e2e8f0; font-size: 12px; background: transparent;")
+        undo_btn = QPushButton("되돌리기")
+        undo_btn.setFixedHeight(24)
+        undo_btn.setStyleSheet(
+            "background: #4361ee; color: #fff; border: none; border-radius: 4px;"
+            "padding: 2px 10px; font-size: 11px;")
+        undo_btn.clicked.connect(self._undo)
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(20, 20)
+        close_btn.setStyleSheet(
+            "background: transparent; color: #64748b; border: none; font-size: 11px;")
+        close_btn.clicked.connect(self._expire)
+        lay.addWidget(self._lbl, 1)
+        lay.addWidget(undo_btn)
+        lay.addWidget(close_btn)
+        self.setFixedHeight(44)
+
+    def show_undo(self, count: int, backup: list) -> None:
+        self._backup = backup
+        self._db = self.parent().db  # type: ignore[union-attr]
+        self._remaining = 5
+        self._lbl.setText(f"{count}건이 삭제되었습니다  (5초 후 자동 종료)")
+        self.show()
+        self._reposition()
+        self._timer.start(5000)
+        self._countdown.start()
+
+    def _tick(self) -> None:
+        self._remaining -= 1
+        if self._remaining > 0:
+            self._lbl.setText(
+                self._lbl.text().split("(")[0].strip()
+                + f"  ({self._remaining}초 후 자동 종료)")
+
+    def _undo(self) -> None:
+        self._timer.stop()
+        self._countdown.stop()
+        if self._db and self._backup:
+            self._db.matches.delete_all()
+            for m in reversed(self._backup):
+                m.id = None  # type: ignore[assignment]
+                self._db.matches.add(m)
+            rv = self.parent()
+            if hasattr(rv, "refresh"):
+                rv.refresh()  # type: ignore[union-attr]
+            if hasattr(rv, "data_changed"):
+                rv.data_changed.emit()  # type: ignore[union-attr]
+        self.hide()
+
+    def _expire(self) -> None:
+        self._timer.stop()
+        self._countdown.stop()
+        self.hide()
+
+    def _reposition(self) -> None:
+        p = self.parent()
+        if p:
+            w = min(p.width() - 40, 420)
+            self.setFixedWidth(w)
+            self.move((p.width() - w) // 2, p.height() - self.height() - 16)
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._reposition()
+
+
 class RecordView(QWidget):
     data_changed = Signal()
     MY_DECK_COL  = 1
@@ -382,7 +471,8 @@ class RecordView(QWidget):
         session_layout.setContentsMargins(0, 0, 0, 0)
         session_layout.setSpacing(8)
 
-        self.ocr_btn = QPushButton("● OCR")
+        self.ocr_btn = QPushButton("● 자동 기록")
+        self.ocr_btn.setToolTip("마스터듀얼 화면을 자동으로 인식해 대전 결과를 기록합니다\n게임이 실행되면 자동으로 시작됩니다")
         self.ocr_btn.setCheckable(True)
         self.ocr_btn.setFixedWidth(76)
         self.ocr_status = QLabel("준비됨")
@@ -391,8 +481,18 @@ class RecordView(QWidget):
         self.today_lbl.setTextFormat(Qt.TextFormat.RichText)
         self.today_lbl.setStyleSheet(
             "color: #94a3b8; background: transparent; font-size: 12px;")
+        self.tess_install_btn = QPushButton("⬇ Tesseract 설치 안내")
+        self.tess_install_btn.setFixedWidth(160)
+        self.tess_install_btn.setStyleSheet(
+            "background: #7f1d1d; color: #fca5a5; border: none; border-radius: 4px;"
+            "font-size: 11px; padding: 2px 6px;")
+        self.tess_install_btn.setToolTip(
+            "Tesseract OCR이 설치되지 않았습니다.\n클릭하면 설치 안내 페이지가 열립니다.")
+        self.tess_install_btn.clicked.connect(self._show_tesseract_install_guide)
+        self.tess_install_btn.hide()
         ocr_layout.addWidget(self.ocr_btn)
         ocr_layout.addWidget(self.ocr_status)
+        ocr_layout.addWidget(self.tess_install_btn)
         ocr_layout.addWidget(self.today_lbl, 1)
 
         session_layout.addWidget(QLabel("내 덱"))
@@ -438,7 +538,7 @@ class RecordView(QWidget):
         self.delete_btn.setFixedHeight(28)
         self.delete_all_btn = QPushButton("전체 삭제")
         self.delete_all_btn.setFixedHeight(28)
-        self.export_btn = QPushButton("CSV 수출")
+        self.export_btn = QPushButton("CSV 내보내기")
         self.export_btn.setFixedHeight(28)
         ab.addWidget(self.delete_btn)
         ab.addWidget(self.delete_all_btn)
@@ -488,6 +588,17 @@ class RecordView(QWidget):
 
         self.ocr_panel = OcrPanel()
         self.ocr_panel.hide()
+
+        # 미확정 행 안내 배너 (미확정 행이 있을 때만 표시)
+        self._review_banner = QLabel(
+            "⚠  노란색 행은 상대 덱 또는 결과가 미확정입니다. "
+            "더블클릭하여 수정하거나 셀을 직접 편집하세요.")
+        self._review_banner.setStyleSheet(
+            "background: #422006; color: #fbbf24; font-size: 11px; "
+            "padding: 5px 12px; border-radius: 4px;")
+        self._review_banner.setWordWrap(False)
+        self._review_banner.hide()
+        root.addWidget(self._review_banner)
 
         root.addWidget(self.table, 1)
 
@@ -640,6 +751,12 @@ class RecordView(QWidget):
                     self.table.setItem(row, col, item)
         finally:
             self._loading_table = False
+        # 미확정 행이 하나라도 있으면 배너 표시
+        has_review = any(
+            self.table.item(r, 0) and self.table.item(r, 0).data(_ROLE_NEEDS_REVIEW)
+            for r in range(self.table.rowCount())
+        )
+        self._review_banner.setVisible(has_review)
 
     def _update_today_lbl(self) -> None:
         today = _date.today().isoformat()
@@ -665,32 +782,33 @@ class RecordView(QWidget):
         try:
             from pathlib import Path
             import pytesseract
+            from ..app_paths import find_tesseract_exe
+
             cfg_cmd = self._engine.cfg.tesseract_cmd
-            # 설정 경로가 실제 존재할 때만 사용, 없으면 PATH에서 자동 탐색
+
+            # 1) 설정 경로가 실제 존재하면 사용
             if cfg_cmd and Path(cfg_cmd).is_file():
                 pytesseract.pytesseract.tesseract_cmd = cfg_cmd
+            else:
+                # 2) 자동 탐색 (번들 경로 → 표준 설치 경로 → PATH)
+                auto_path = find_tesseract_exe()
+                if auto_path:
+                    pytesseract.pytesseract.tesseract_cmd = auto_path
+                    # 발견된 경로를 설정에 저장
+                    self._engine.cfg.tesseract_cmd = auto_path
+
             pytesseract.get_tesseract_version()
             self._ocr_available = True
             self.ocr_status.setText("OCR 준비됨 — masterduel.exe 확인 대기")
         except Exception:
             self._ocr_available = False
             self.ocr_btn.setEnabled(False)
-            cfg_cmd = self._engine.cfg.tesseract_cmd
-            if cfg_cmd:
-                tip = (
-                    f"tesseract를 찾을 수 없습니다\n"
-                    f"설정 경로: {cfg_cmd}\n"
-                    f"Tesseract(한국어 데이터 포함)를 설치하거나\n"
-                    f"ocr_config.json의 tesseract_cmd를 실제 경로로 수정하세요"
-                )
-                self.ocr_status.setText("비활성 — tesseract 경로 오류")
-            else:
-                tip = (
-                    "Tesseract OCR이 설치되지 않았거나 PATH에 없습니다\n"
-                    "Tesseract(한국어 데이터 포함)를 설치 후 재시작하세요"
-                )
-                self.ocr_status.setText("비활성 — tesseract 미설치")
-            self.ocr_btn.setToolTip(tip)
+            self.tess_install_btn.show()
+            self.ocr_status.setText("자동 기록 비활성 — Tesseract 미설치")
+            self.ocr_btn.setToolTip(
+                "Tesseract OCR이 설치되지 않아 자동 기록을 사용할 수 없습니다.\n"
+                "오른쪽 버튼을 클릭하여 설치 안내를 확인하세요."
+            )
 
     def _auto_start_ocr(self) -> None:
         if not getattr(self, "_ocr_available", False):
@@ -723,7 +841,7 @@ class RecordView(QWidget):
         self.ocr_btn.blockSignals(True)
         self.ocr_btn.setChecked(False)
         self.ocr_btn.blockSignals(False)
-        self.ocr_btn.setText("● OCR")
+        self.ocr_btn.setText("● 자동 기록")
         self.ocr_btn.setStyleSheet("")
         self.ocr_status.setText(status_text)
 
@@ -745,7 +863,7 @@ class RecordView(QWidget):
                 self._poller.error.connect(self._on_ocr_error)
             if not self._poller.isRunning():
                 self._poller.start()
-            self.ocr_btn.setText("⏹")
+            self.ocr_btn.setText("⏹ 기록 중")
             self.ocr_btn.setStyleSheet(
                 "background-color: #22c55e; color: #052e16; border: none;"
                 "border-radius: 6px; padding: 5px 10px; font-weight: bold;")
@@ -754,7 +872,7 @@ class RecordView(QWidget):
             self._ocr_should_run = False
             if self._poller:
                 self._poller.stop()
-            self.ocr_btn.setText("● OCR")
+            self.ocr_btn.setText("● 자동 기록")
             self.ocr_btn.setStyleSheet("")
             self.ocr_status.setText("OCR 감지 중지")
 
@@ -988,12 +1106,15 @@ class RecordView(QWidget):
         yes = QMessageBox.StandardButton.Yes
         if QMessageBox.question(
             self, "전체 삭제",
-            f"기록 {count}건을 전부 삭제할까요?\n이 작업은 되돌릴 수 없습니다.",
+            f"기록 {count}건을 전부 삭제할까요?",
             yes | QMessageBox.StandardButton.No,
-        ) == yes:
-            self.db.matches.delete_all()
-            self.refresh()
-            self.data_changed.emit()
+        ) != yes:
+            return
+        backup = list(self.db.matches.all())
+        self.db.matches.delete_all()
+        self.refresh()
+        self.data_changed.emit()
+        self._undo_toast.show_undo(count, backup)
 
     def _on_export_csv(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -1001,7 +1122,7 @@ class RecordView(QWidget):
         if not path:
             return
         count = self.db.matches.export_csv(path)
-        QMessageBox.information(self, "수출 완료", f"{count}건을 저장했습니다:\n{path}")
+        QMessageBox.information(self, "내보내기 완료", f"{count}건을 저장했습니다:\n{path}")
 
     def _register_deck(self, name: str, is_mine: bool) -> None:
         # 'WCS'는 실제 덱이 아닌 sentinel — 덱 목록에 등록하지 않는다

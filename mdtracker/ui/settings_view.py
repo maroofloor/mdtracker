@@ -1,13 +1,18 @@
-"""설정 뷰 — 창 크기 프리셋, UI 스케일, 피드백 채널."""
+"""설정 뷰 — 창 크기 프리셋, UI 스케일, OCR 설정, 피드백 채널."""
 
 from __future__ import annotations
+
+import webbrowser
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
+    QMessageBox,
     QPushButton,
     QSlider,
     QVBoxLayout,
@@ -18,46 +23,59 @@ from ..ocr.config import OcrConfig, default_config_path
 from ..styles.theme import BORDER, TEXT, TEXT2
 
 
-class FeedbackDialog(QDialog):
-    """Google Form 피드백 팝업 다이얼로그."""
+def _open_feedback_url(parent=None) -> None:
+    """피드백 URL을 브라우저로 열거나, URL이 없으면 안내 메시지를 표시한다."""
+    cfg = OcrConfig.load_or_default(default_config_path())
+    url = cfg.feedback_form_url.strip()
 
-    def __init__(self, parent=None) -> None:
+    if not url:
+        QMessageBox.information(
+            parent, "피드백",
+            "현재 피드백 폼이 준비 중입니다.\n"
+            "GitHub Issues 페이지에서 버그 신고 및 기능 건의를 해주세요:\n"
+            "https://github.com/maroofloor/mdtracker/issues"
+        )
+        return
+
+    # WebEngine 시도 → 실패 시 기본 브라우저 폴백
+    try:
+        from PySide6.QtWebEngineWidgets import QWebEngineView  # noqa: F401
+        dlg = _FeedbackDialog(parent, url)
+        dlg.exec()
+    except Exception:
+        webbrowser.open(url)
+
+
+class _FeedbackDialog(QDialog):
+    """Google Form 피드백 팝업 다이얼로그 (WebEngine 사용 가능 시)."""
+
+    def __init__(self, parent=None, url: str = "") -> None:
         super().__init__(parent)
         self.setWindowTitle("피드백 / 건의")
         self.resize(820, 680)
         self._vbox = QVBoxLayout(self)
         self._vbox.setContentsMargins(0, 0, 0, 0)
+        self._url = url
 
-        cfg = OcrConfig.load_or_default(default_config_path())
-        url = cfg.feedback_form_url.strip()
-
-        if not url:
-            self._show_error(
-                "피드백 URL이 설정되지 않았습니다.\n"
-                "ocr_config.json 의 feedback_form_url 을 입력해주세요."
-            )
-            return
-
-        try:
-            from PySide6.QtWebEngineWidgets import QWebEngineView
-            self._web = QWebEngineView()
-            self._web.load(QUrl(url))
-            self._web.loadFinished.connect(self._on_load_finished)
-            self._vbox.addWidget(self._web)
-        except Exception:
-            self._show_error("WebEngine 모듈을 불러올 수 없습니다.")
+        from PySide6.QtWebEngineWidgets import QWebEngineView
+        self._web = QWebEngineView()
+        self._web.load(QUrl(url))
+        self._web.loadFinished.connect(self._on_load_finished)
+        self._vbox.addWidget(self._web)
 
     def _on_load_finished(self, ok: bool) -> None:
         if not ok:
             if hasattr(self, "_web"):
                 self._web.hide()
-            self._show_error("연결할 수 없습니다. 인터넷 연결을 확인해주세요.")
+            lbl = QLabel("연결할 수 없습니다. 인터넷 연결을 확인하거나\n"
+                         "브라우저에서 직접 열어주세요.")
+            lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            lbl.setStyleSheet(f"color: {TEXT2}; font-size: 13px; padding: 24px;")
+            self._vbox.addWidget(lbl)
+            open_btn = QPushButton("브라우저에서 열기")
+            open_btn.clicked.connect(lambda: webbrowser.open(self._url))
+            self._vbox.addWidget(open_btn, alignment=Qt.AlignmentFlag.AlignCenter)
 
-    def _show_error(self, msg: str) -> None:
-        lbl = QLabel(msg)
-        lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        lbl.setStyleSheet(f"color: {TEXT2}; font-size: 13px; padding: 24px;")
-        self._vbox.addWidget(lbl)
 
 _SIZE_PRESETS = [
     ("900 × 600",   900, 600),
@@ -126,6 +144,69 @@ class SettingsView(QWidget):
         self.scale_slider.valueChanged.connect(self._on_scale_slider_changed)
         self.scale_step_check.toggled.connect(self._on_scale_step_toggled)
 
+        # ── OCR 설정 ────────────────────────────────────────────────
+        root.addWidget(self._section_label("OCR 설정"))
+
+        # Tesseract 경로
+        tess_row = QHBoxLayout()
+        tess_row.setSpacing(6)
+        tess_lbl = QLabel("Tesseract 경로")
+        tess_lbl.setFixedWidth(100)
+        tess_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
+        self.tess_path_edit = QLineEdit()
+        self.tess_path_edit.setPlaceholderText("비어 있으면 PATH에서 자동 탐색")
+        self.tess_path_edit.setStyleSheet(
+            f"background: #0f172a; color: {TEXT}; border: 1px solid {BORDER};"
+            "border-radius: 4px; padding: 3px 8px;")
+        tess_browse_btn = QPushButton("찾아보기")
+        tess_browse_btn.setFixedWidth(72)
+        tess_browse_btn.clicked.connect(self._browse_tesseract)
+        tess_test_btn = QPushButton("연결 테스트")
+        tess_test_btn.setFixedWidth(84)
+        tess_test_btn.clicked.connect(self._test_tesseract)
+        tess_row.addWidget(tess_lbl)
+        tess_row.addWidget(self.tess_path_edit, 1)
+        tess_row.addWidget(tess_browse_btn)
+        tess_row.addWidget(tess_test_btn)
+        root.addLayout(tess_row)
+
+        # 캡처 모니터
+        mon_row = QHBoxLayout()
+        mon_row.setSpacing(6)
+        mon_lbl = QLabel("캡처 모니터")
+        mon_lbl.setFixedWidth(100)
+        mon_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
+        from PySide6.QtWidgets import QComboBox
+        self.monitor_combo = QComboBox()
+        self.monitor_combo.setFixedWidth(160)
+        self._populate_monitors()
+        self.monitor_combo.currentIndexChanged.connect(self._on_monitor_changed)
+        mon_row.addWidget(mon_lbl)
+        mon_row.addWidget(self.monitor_combo)
+        mon_row.addStretch()
+        root.addLayout(mon_row)
+
+        # 설정 로드
+        self._load_ocr_settings()
+
+        # ── 버전 정보 ──────────────────────────────────────────────
+        root.addWidget(self._section_label("버전 정보"))
+        ver_row = QHBoxLayout()
+        ver_row.setSpacing(10)
+        from mdtracker import __version__
+        ver_lbl = QLabel(f"현재 버전: <b>v{__version__}</b>")
+        ver_lbl.setTextFormat(Qt.TextFormat.RichText)
+        ver_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
+        self._update_status_lbl = QLabel("")
+        self._update_status_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 11px;")
+        check_btn = QPushButton("업데이트 확인")
+        check_btn.setFixedWidth(110)
+        check_btn.clicked.connect(self._check_update_manual)
+        ver_row.addWidget(ver_lbl)
+        ver_row.addWidget(self._update_status_lbl, 1)
+        ver_row.addWidget(check_btn)
+        root.addLayout(ver_row)
+
         # ── 피드백 / 건의 ────────────────────────────────────────────
         root.addWidget(self._section_label("피드백 / 건의"))
         feedback_row = QHBoxLayout()
@@ -142,12 +223,80 @@ class SettingsView(QWidget):
 
         root.addStretch()
 
+    # ── OCR 설정 헬퍼 ────────────────────────────────────────────────
+
+    def _populate_monitors(self) -> None:
+        self.monitor_combo.blockSignals(True)
+        self.monitor_combo.clear()
+        try:
+            import mss
+            with mss.mss() as sct:
+                for i, mon in enumerate(sct.monitors[1:], start=1):
+                    self.monitor_combo.addItem(
+                        f"모니터 {i}  ({mon['width']}×{mon['height']})", userData=i)
+        except Exception:
+            self.monitor_combo.addItem("모니터 1", userData=1)
+        self.monitor_combo.blockSignals(False)
+
+    def _load_ocr_settings(self) -> None:
+        cfg = OcrConfig.load_or_default(default_config_path())
+        self.tess_path_edit.setText(cfg.tesseract_cmd or "")
+        # 모니터 콤보박스에서 저장된 index 선택
+        for i in range(self.monitor_combo.count()):
+            if self.monitor_combo.itemData(i) == cfg.monitor:
+                self.monitor_combo.setCurrentIndex(i)
+                break
+
+    def _save_ocr_settings(self) -> None:
+        cfg = OcrConfig.load_or_default(default_config_path())
+        cfg.tesseract_cmd = self.tess_path_edit.text().strip()
+        mon_data = self.monitor_combo.currentData()
+        if mon_data is not None:
+            cfg.monitor = int(mon_data)
+        cfg.to_json(default_config_path())
+
+    def _browse_tesseract(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Tesseract 실행 파일 선택", "",
+            "실행 파일 (*.exe);;모든 파일 (*)"
+        )
+        if path:
+            self.tess_path_edit.setText(path)
+            self._save_ocr_settings()
+
+    def _test_tesseract(self) -> None:
+        path = self.tess_path_edit.text().strip()
+        try:
+            import pytesseract
+            from pathlib import Path
+            if path and Path(path).is_file():
+                pytesseract.pytesseract.tesseract_cmd = path
+            ver = pytesseract.get_tesseract_version()
+            self._save_ocr_settings()
+            QMessageBox.information(
+                self, "연결 테스트 성공",
+                f"Tesseract {ver} 정상 연결됨.\n설정이 저장되었습니다."
+            )
+        except Exception as e:
+            QMessageBox.warning(
+                self, "연결 테스트 실패",
+                f"Tesseract를 찾을 수 없습니다.\n\n{e}\n\n"
+                "경로를 확인하거나 Tesseract를 설치해주세요."
+            )
+
+    def _on_monitor_changed(self, _index: int) -> None:
+        self._save_ocr_settings()
+
+    # ── 섹션 라벨 ────────────────────────────────────────────────────
+
     def _section_label(self, text: str) -> QLabel:
         lbl = QLabel(text)
         lbl.setStyleSheet(
             f"color: {TEXT2}; font-size: 11px; font-weight: 600;"
             f"border-bottom: 1px solid {BORDER}; padding-bottom: 4px;")
         return lbl
+
+    # ── UI 스케일 ─────────────────────────────────────────────────────
 
     def set_current_scale(self, scale: float) -> None:
         value = self._clamp_percent(round(scale * 100))
@@ -183,6 +332,24 @@ class SettingsView(QWidget):
         snapped = round(value / _SCALE_STEP) * _SCALE_STEP
         return self._clamp_percent(snapped)
 
+    def _check_update_manual(self) -> None:
+        """버튼 클릭 시 업데이트를 동기로 확인한다."""
+        from mdtracker.updater import _fetch_latest_release, _is_newer, _show_update_dialog, _find_installer_asset, _download_and_install
+        from mdtracker import __version__
+        self._update_status_lbl.setText("확인 중…")
+        release = _fetch_latest_release()
+        if not release:
+            self._update_status_lbl.setText("확인 실패 (네트워크 오류)")
+            return
+        tag = release.get("tag_name", "")
+        if tag and _is_newer(tag, __version__):
+            self._update_status_lbl.setText(f"새 버전 {tag} 있음!")
+            if _show_update_dialog(self, tag, release.get("body", "")):
+                asset = _find_installer_asset(release.get("assets", []))
+                if asset:
+                    _download_and_install(self, asset, tag)
+        else:
+            self._update_status_lbl.setText("최신 버전입니다 ✓")
+
     def _open_feedback(self) -> None:
-        dlg = FeedbackDialog(self)
-        dlg.exec()
+        _open_feedback_url(self)

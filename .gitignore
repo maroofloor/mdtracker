@@ -7,6 +7,11 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+
+# PyInstaller 빌드 아티팩트
+*.spec.bak
+tesseract/              # Tesseract 번들 바이너리 (CI가 다운로드)
+installer/Output/       # 생성된 인스톨러 .exe
 .venv/
 venv/
 env/

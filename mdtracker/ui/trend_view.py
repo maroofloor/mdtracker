@@ -5,6 +5,8 @@ stats.trend_series()를 소비. pyqtgraph로 선 그래프를 그린다.
 
 from __future__ import annotations
 
+from datetime import date as _date
+
 import pyqtgraph as pg
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 
@@ -45,7 +47,13 @@ class TrendView(QWidget):
         points = t["points"]
         self.plot.clear()
         if points:
-            xs = list(range(len(points)))
+            # X축을 날짜 ordinal로 — 점들의 실제 시간 간격을 반영
+            def _ord(p) -> int:
+                try:
+                    return _date.fromisoformat(p["date"]).toordinal()
+                except Exception:
+                    return 0
+            xs = [_ord(p) for p in points]
             cumulative = [(p["cumulative_win_rate"] or 0) * 100 for p in points]
             daily = [(p["win_rate"] or 0) * 100 for p in points]
             self.plot.plot(xs, cumulative, name="누적 승률",
@@ -53,13 +61,14 @@ class TrendView(QWidget):
             self.plot.plot(xs, daily, name="일별 승률",
                            pen=pg.mkPen("#cccccc", width=1.5),
                            symbol="o", symbolSize=5, symbolBrush="#e57373")
-            self.plot.getAxis("bottom").setTicks(
-                [[(i, points[i]["date"][5:]) for i in xs]])
+            # 틱 레이블: ordinal → MM/DD
+            ticks = [(x, points[i]["date"][5:]) for i, x in enumerate(xs)]
+            self.plot.getAxis("bottom").setTicks([ticks])
 
         streak = t["current_streak"]
         if streak["type"] == "win":
-            self.streak_lbl.setText(f"🔥 현재 {streak['count']}연승")
+            self.streak_lbl.setText(f"\U0001f525 현재 {streak['count']}연승")
         elif streak["type"] == "loss":
-            self.streak_lbl.setText(f"❄ 현재 {streak['count']}연패")
+            self.streak_lbl.setText(f"\u2745 현재 {streak['count']}연패")
         else:
             self.streak_lbl.setText("기록 없음")

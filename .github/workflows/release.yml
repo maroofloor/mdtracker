@@ -1,0 +1,142 @@
+name: Build & Release
+
+# v태그 푸시 시 자동 실행: git tag v0.2.0 && git push origin v0.2.0
+on:
+  push:
+    tags:
+      - "v*.*.*"
+  workflow_dispatch:   # 수동 실행 (테스트용)
+
+permissions:
+  contents: write      # GitHub Release 생성 권한
+
+jobs:
+  build-windows:
+    name: Windows Build
+    runs-on: windows-latest
+
+    steps:
+      # ── 1. 소스 체크아웃 ────────────────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── 2. Python 설치 ──────────────────────────────────────────────────────
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # ── 3. 의존성 설치 ──────────────────────────────────────────────────────
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # ── 4. 버전 추출 ────────────────────────────────────────────────────────
+      - name: Extract version
+        id: version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"          # v0.2.0
+          $ver = $tag.TrimStart('v')               # 0.2.0
+          echo "TAG=$tag"   >> $env:GITHUB_OUTPUT
+          echo "VERSION=$ver" >> $env:GITHUB_OUTPUT
+
+      # ── 5. version_info.txt 및 __init__.py 버전 동기화 ──────────────────────
+      - name: Patch version strings
+        shell: pwsh
+        run: |
+          $ver = "${{ steps.version.outputs.VERSION }}"
+          $parts = $ver -split '\.'
+          $tuple = "($($parts[0]), $($parts[1]), $($parts[2]), 0)"
+
+          # version_info.txt
+          (Get-Content version_info.txt) `
+            -replace "filevers=\(.*?\)",  "filevers=$tuple" `
+            -replace "prodvers=\(.*?\)",  "prodvers=$tuple" `
+            -replace "'FileVersion',\s+'[^']*'",  "'FileVersion',      '$ver'" `
+            -replace "'ProductVersion',\s+'[^']*'","'ProductVersion',   '$ver'" |
+            Set-Content version_info.txt
+
+          # mdtracker/__init__.py
+          (Get-Content mdtracker/__init__.py) `
+            -replace '__version__ = "[^"]*"', "__version__ = `"$ver`"" |
+            Set-Content mdtracker/__init__.py
+
+      # ── 6. Tesseract 다운로드 & 번들 ────────────────────────────────────────
+      - name: Download & bundle Tesseract
+        shell: pwsh
+        run: |
+          # Tesseract 5.x Windows 포터블 인스톨러 (UB Mannheim 빌드)
+          $url = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.3.20231005/tesseract-ocr-w64-setup-5.3.3.20231005.exe"
+          $installer = "$env:TEMP\tesseract_setup.exe"
+
+          Write-Host "Downloading Tesseract..."
+          Invoke-WebRequest -Uri $url -OutFile $installer
+
+          # 무인 설치 (기본 경로 + kor 언어팩 포함)
+          Start-Process $installer -ArgumentList `
+            "/S", `
+            "/COMPONENTS=tesseract,additional_language_data\kor", `
+            "/D=C:\Program Files\Tesseract-OCR" `
+            -Wait
+
+          # 번들 폴더로 복사
+          New-Item -ItemType Directory -Force -Path tesseract | Out-Null
+          Copy-Item "C:\Program Files\Tesseract-OCR\*" tesseract -Recurse -Force
+
+          Write-Host "Tesseract bundled:"
+          Get-ChildItem tesseract | Select-Object Name
+
+      # ── 7. PyInstaller 빌드 ─────────────────────────────────────────────────
+      - name: Build with PyInstaller
+        run: pyinstaller MDTracker.spec --noconfirm
+
+      # ── 8. ocr_config.json 기본값 패치 ──────────────────────────────────────
+      #    번들된 Tesseract 상대 경로를 기본값으로 지정
+      - name: Patch ocr_config defaults
+        shell: pwsh
+        run: |
+          $cfg = Get-Content ocr_config.example.json | ConvertFrom-Json
+          $cfg.tesseract_cmd = "tesseract\tesseract.exe"   # 앱 폴더 상대 경로
+          $cfg | ConvertTo-Json -Depth 10 | Set-Content dist\MDTracker\ocr_config.example.json
+
+      # ── 9. Inno Setup 인스톨러 빌드 ─────────────────────────────────────────
+      - name: Build installer (Inno Setup)
+        shell: pwsh
+        run: |
+          # Inno Setup 6는 GitHub Actions windows-latest에 기본 포함
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $ver  = "${{ steps.version.outputs.VERSION }}"
+
+          # iss 파일의 AppVersion을 현재 태그로 교체
+          (Get-Content installer\MDTracker_Setup.iss) `
+            -replace '#define AppVersion\s+"[^"]*"', "#define AppVersion   `"$ver`"" |
+            Set-Content installer\MDTracker_Setup.iss
+
+          & $iscc installer\MDTracker_Setup.iss
+          ls installer\Output\
+
+      # ── 10. GitHub Release 생성 & 업로드 ────────────────────────────────────
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: "MDTracker ${{ steps.version.outputs.TAG }}"
+          body: |
+            ## 변경 사항
+            <!-- 릴리스 노트를 여기에 작성 -->
+
+            ## 설치 방법
+            1. 아래 `MDTracker_Setup_v*.exe` 다운로드
+            2. 실행 → 안내에 따라 설치
+            3. Python / Tesseract 별도 설치 불필요
+
+            ## 시스템 요구사항
+            - Windows 10/11 (64bit)
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.TAG, '-') }}
+          files: |
+            installer/Output/MDTracker_Setup_v*.exe

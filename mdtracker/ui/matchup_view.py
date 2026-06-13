@@ -168,9 +168,19 @@ class MatchupView(QWidget):
         self._empty_lbl.hide()
         self._scroll.show()
 
+        cols = self._cols_for_width()
         for idx, (opp, cell) in enumerate(entries):
             card = _MatchupCard(opp, cell)
-            self._grid.addWidget(card, idx // _COLS, idx % _COLS)
+            self._grid.addWidget(card, idx // cols, idx % cols)
+
+    def _cols_for_width(self) -> int:
+        vp_w = self._scroll.viewport().width()
+        cols = max(1, vp_w // (_CARD_W + 10))
+        return cols
+
+    def resizeEvent(self, event) -> None:
+        super().resizeEvent(event)
+        self._render_cards()
 
     def refresh(self) -> None:
         cur = self._deck_combo.currentText()
