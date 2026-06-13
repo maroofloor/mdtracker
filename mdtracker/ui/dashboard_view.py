@@ -49,6 +49,7 @@ class DashboardView(QWidget):
 
     def _update_filter_options(self) -> None:
         self.filter_bar.set_deck_options_from(self.db.matches.all())
+        self.filter_bar.set_season_options_from(self.db.matches.all())
 
     def refresh(self) -> None:
         """모든 서브탭을 갱신한다 (data_changed 수신 시 호출)."""

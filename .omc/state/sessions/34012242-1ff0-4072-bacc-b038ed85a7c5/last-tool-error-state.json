@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"grep -r \\\"mss\\\\|MSS\\\" --include=\\\"*.py\\\" F:\\\\AI\\\\mdtracker\"}",
+  "error": "Exit code 2\ngrep: F:AImdtracker: No such file or directory",
+  "timestamp": "2026-06-09T10:56:18.096Z",
+  "retry_count": 1
+}

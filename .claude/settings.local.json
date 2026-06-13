@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__plugin_oh-my-claudecode_t__state_write",
+      "Bash(Get-ChildItem -Path \"F:\\\\AI\\\\mdtracker\" -Recurse -Filter \"*.py\")",
+      "Bash(Select-Object -ExpandProperty FullName)",
+      "Bash(xargs grep -l \"monitor\\\\|resolution\\\\|screen\\\\|DPI\\\\|fullscreen\")",
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(QT_QPA_PLATFORM=offscreen python main.py --check)",
+      "Bash(python -c ' *)",
+      "mcp__plugin_oh-my-claudecode_t__state_list_active",
+      "mcp__plugin_oh-my-claudecode_t__state_clear",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/Scripts/python.exe main.py --check)",
+      "Bash(QT_QPA_PLATFORM=offscreen .venv/bin/python main.py --check)"
+    ]
+  }
+}

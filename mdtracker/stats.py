@@ -68,6 +68,26 @@ def _current_streak(matches_sorted: Sequence[Match]) -> dict:
     return {"type": streak_type, "count": count}
 
 
+
+def _best_streak(matches_sorted: Sequence[Match]) -> dict:
+    """역대 최장 연승/연패. {win: int, loss: int}"""
+    best_win = best_loss = 0
+    cur_type: Optional[str] = None
+    cur_count = 0
+    for m in matches_sorted:
+        if m.result == "draw":
+            continue
+        if cur_type == m.result:
+            cur_count += 1
+        else:
+            cur_type, cur_count = m.result, 1
+        if cur_type == "win":
+            best_win = max(best_win, cur_count)
+        elif cur_type == "loss":
+            best_loss = max(best_loss, cur_count)
+    return {"win": best_win, "loss": best_loss}
+
+
 # ---- 필터 ----
 def filter_matches(matches: Sequence[Match], *,
                    period: str = "all",
@@ -77,6 +97,7 @@ def filter_matches(matches: Sequence[Match], *,
                    result: Optional[str] = None,
                    coin_result: Optional[str] = None,
                    coin_toss: Optional[str] = None,
+                   season: Optional[str] = None,
                    today: Optional[_date] = None) -> list[Match]:
     """UI 필터바 공용 순수 필터 — 조건이 None이면 해당 축은 거르지 않는다.
 
@@ -110,6 +131,8 @@ def filter_matches(matches: Sequence[Match], *,
         ms = [m for m in ms if m.coin_result == coin_result]
     if coin_toss is not None:
         ms = [m for m in ms if m.coin_toss == coin_toss]
+    if season is not None:
+        ms = [m for m in ms if m.season == season]
     return ms
 
 
@@ -196,6 +219,7 @@ def trend_series(matches: Sequence[Match], *,
     return {
         "points": points,
         "current_streak": _current_streak(ms),
+        "best_streak": _best_streak(ms),
         "rank_history": rank_history,
     }
 

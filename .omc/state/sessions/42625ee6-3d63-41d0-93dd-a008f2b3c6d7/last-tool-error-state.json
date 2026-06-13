@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"cd \\\"F:\\\\AI\\\\mdtracker\\\" && python -c \\\"\\n# US-005: poller None 처리 확인 (grep)\\nwith open('mdtracker/ocr/poller.py') as f:\\n    src = f.read()\\nassert 'if img is None' in src, 'poller.py에 im...",
+  "error": "Exit code 1\nTraceback (most recent call last):\r\n  File \"<string>\", line 4, in <module>\r\nUnicodeDecodeError: 'cp949' codec can't decode byte 0xec in position 3: illegal multibyte sequence",
+  "timestamp": "2026-06-09T11:37:49.050Z",
+  "retry_count": 2
+}

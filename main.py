@@ -61,15 +61,4 @@ def main() -> None:
         check_update_async(parent=win)
 
     # --check: 윈도우만 띄우고 즉시 종료 (헤드리스 구성 검증용)
-    if "--check" in sys.argv:
-        print("[mdtracker] 메인 윈도우 구성 성공")
-        db.close()
-        return
-
-    exit_code = app.exec()
-    db.close()
-    sys.exit(exit_code)
-
-
-if __name__ == "__main__":
-    main()
+    

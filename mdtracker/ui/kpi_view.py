@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QColor, QLinearGradient, QPainter
@@ -106,7 +106,12 @@ class KpiCard(QWidget):
             f"color: {TEXT2}; font-size: 11px; border: none;")
         layout.addWidget(self._streak)
 
-    def update_data(self, s: dict, streak: dict) -> None:
+        self._best = QLabel("")
+        self._best.setStyleSheet(
+            f"color: {TEXT2}; font-size: 10px; border: none;")
+        layout.addWidget(self._best)
+
+    def update_data(self, s: dict, streak: dict, best: dict | None = None) -> None:
         ov = s["overall"]
         wr = ov["win_rate"] or 0.0
         color = WIN if wr >= 0.5 else LOSE
@@ -114,9 +119,17 @@ class KpiCard(QWidget):
         self._rate_lbl.setStyleSheet(
             f"color: {color}; font-size: 28px; font-weight: 700; border: none;")
         self._bar.set_rate(wr)
+        draws = ov.get("draws", 0)
+        draw_str = f"  무{draws}" if draws > 0 else ""
         self._detail.setText(
-            f"{ov['wins']}승  {ov['losses']}패  ·  {ov['n']}전")
+            f"{ov['wins']}승  {ov['losses']}패{draw_str}  ·  {ov['n']}전")
         self._streak.setText(_streak_text(streak))
+        if best and (best["win"] or best["loss"]):
+            self._best.setText(
+                f"최고  🔥{best['win']}연승 / ❄{best['loss']}연패")
+            self._best.show()
+        else:
+            self._best.hide()
 
 
 class KpiView(QWidget):
@@ -139,7 +152,7 @@ class KpiView(QWidget):
         card_row = QHBoxLayout()
         card_row.setSpacing(10)
         self._cards: list[KpiCard] = []
-        for title in ["전체", "오늘"]:
+        for title in ["전체", "오늘", "7일", "30일"]:
             card = KpiCard(title)
             card_row.addWidget(card)
             self._cards.append(card)
@@ -202,20 +215,24 @@ class KpiView(QWidget):
 
     # ── internal helpers ─────────────────────────────────────────
 
-    def _period_matches(self) -> tuple[list, list]:
+    def _period_matches(self) -> tuple[list, list, list, list]:
         all_matches = self._matches()
         today_prefix = date.today().isoformat()
         today = [m for m in all_matches if m.played_at.startswith(today_prefix)]
-        return all_matches, today
+        seven_ago = (date.today() - timedelta(days=6)).isoformat()
+        week = [m for m in all_matches if m.played_at[:10] >= seven_ago]
+        thirty_ago = (date.today() - timedelta(days=29)).isoformat()
+        month30 = [m for m in all_matches if m.played_at[:10] >= thirty_ago]
+        return all_matches, today, week, month30
 
     def refresh(self) -> None:
-        all_matches, today = self._period_matches()
+        all_matches, today, week, month30 = self._period_matches()
         s_all = stats.win_rate_summary([])  # 빈 데이터셋 기본값 (NameError 방어)
 
-        for card, ms in zip(self._cards, [all_matches, today]):
+        for card, ms in zip(self._cards, [all_matches, today, week, month30]):
             s = stats.win_rate_summary(ms)
             t = stats.trend_series(ms)
-            card.update_data(s, t["current_streak"])
+            card.update_data(s, t["current_streak"], t.get("best_streak"))
             if card is self._cards[0]:
                 s_all = s
 

@@ -620,6 +620,7 @@ class RecordView(QWidget):
     def refresh(self) -> None:
         self._reload_deck_combos()
         self.filter_bar.set_deck_options_from(self.db.matches.all())
+        self.filter_bar.set_season_options_from(self.db.matches.all())
         self._reload_table()
         self._update_today_lbl()
         self._update_mini_kpi()

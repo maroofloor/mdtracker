@@ -1,0 +1,252 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1781055413542,
+  "projectRoot": "F:\\AI\\mdtracker",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Python",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "requirements.txt"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "pip",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "assets"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "assets": {
+      "path": "assets",
+      "purpose": "Static assets",
+      "fileCount": 1,
+      "lastAccessed": 1781055413521,
+      "keyFiles": [
+        "icon.png"
+      ]
+    },
+    "data": {
+      "path": "data",
+      "purpose": "Data files",
+      "fileCount": 1,
+      "lastAccessed": 1781055413522,
+      "keyFiles": [
+        "mdtracker.db"
+      ]
+    },
+    "mdtracker": {
+      "path": "mdtracker",
+      "purpose": null,
+      "fileCount": 6,
+      "lastAccessed": 1781055413523,
+      "keyFiles": [
+        "app_paths.py",
+        "db.py",
+        "models.py",
+        "repository.py",
+        "stats.py"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "main.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055669538,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\db.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055674730,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\repository.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055675219,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\models.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055675679,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\stats.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055676092,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ocr\\engine.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055710718,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ocr\\poller.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055711182,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ocr\\config.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055711667,
+      "type": "file"
+    },
+    {
+      "path": "ocr_config.json",
+      "accessCount": 1,
+      "lastAccessed": 1781055711926,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\main_window.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055747198,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\record_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055747622,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\dashboard_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055782017,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\labels.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055782599,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\manual_dialog.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055783310,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\ocr_panel.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055783447,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\settings_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055817867,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\deck_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055818079,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\kpi_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055818532,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\trend_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055818816,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\meta_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055853083,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\matchup_view.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055853589,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ocr\\__init__.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055854035,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\app_paths.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055854533,
+      "type": "file"
+    },
+    {
+      "path": "requirements.txt",
+      "accessCount": 1,
+      "lastAccessed": 1781055854885,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\sidebar.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055890668,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\ui\\title_bar.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055891135,
+      "type": "file"
+    },
+    {
+      "path": "mdtracker\\styles\\theme.py",
+      "accessCount": 1,
+      "lastAccessed": 1781055891640,
+      "type": "file"
+    },
+    {
+      "path": "diagnostics_report.html",
+      "accessCount": 1,
+      "lastAccessed": 1781056269468,
+      "type": "file"
+    },
+    {
+      "path": "FIX_PROMPT.md",
+      "accessCount": 1,
+      "lastAccessed": 1781056326594,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
