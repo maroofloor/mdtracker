@@ -69,26 +69,30 @@ jobs:
       - name: Download & bundle Tesseract
         shell: pwsh
         run: |
-          # Tesseract 5.x Windows 포터블 인스톨러 (UB Mannheim 빌드)
-          $url = "https://github.com/UB-Mannheim/tesseract/releases/download/v5.3.3.20231005/tesseract-ocr-w64-setup-5.3.3.20231005.exe"
+          $ErrorActionPreference = "Stop"
+          # UB Mannheim Tesseract (현재 최신 안정 버전으로 고정)
+          $ver = "5.4.0.20240606"
+          $url = "https://github.com/UB-Mannheim/tesseract/releases/download/v$ver/tesseract-ocr-w64-setup-$ver.exe"
           $installer = "$env:TEMP\tesseract_setup.exe"
 
-          Write-Host "Downloading Tesseract..."
+          Write-Host "Downloading Tesseract $ver ..."
           Invoke-WebRequest -Uri $url -OutFile $installer
 
-          # 무인 설치 (기본 경로 + kor 언어팩 포함)
-          Start-Process $installer -ArgumentList `
-            "/S", `
-            "/COMPONENTS=tesseract,additional_language_data\kor", `
-            "/D=C:\Program Files\Tesseract-OCR" `
-            -Wait
+          # 무인 설치 (/D 는 반드시 마지막, 따옴표 없이)
+          $tessRoot = "C:\Program Files\Tesseract-OCR"
+          Start-Process $installer -ArgumentList '/S', "/D=$tessRoot" -Wait
+          if (-not (Test-Path "$tessRoot\tesseract.exe")) { throw "Tesseract 설치 실패" }
+
+          # 한국어 학습데이터 추가 (인스톨러 기본 구성에 없을 수 있어 직접 내려받음)
+          $korUrl = "https://github.com/tesseract-ocr/tessdata/raw/main/kor.traineddata"
+          Invoke-WebRequest -Uri $korUrl -OutFile "$tessRoot\tessdata\kor.traineddata"
 
           # 번들 폴더로 복사
           New-Item -ItemType Directory -Force -Path tesseract | Out-Null
-          Copy-Item "C:\Program Files\Tesseract-OCR\*" tesseract -Recurse -Force
+          Copy-Item "$tessRoot\*" tesseract -Recurse -Force
 
-          Write-Host "Tesseract bundled:"
-          Get-ChildItem tesseract | Select-Object Name
+          Write-Host "Bundled traineddata:"
+          Get-ChildItem tesseract\tessdata\*.traineddata | Select-Object Name
 
       # ── 7. PyInstaller 빌드 ─────────────────────────────────────────────────
       - name: Build with PyInstaller
