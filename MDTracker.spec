@@ -62,35 +62,17 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
+    # 표준 라이브러리는 상호 의존이 많아 함부로 제외하면 런타임 크래시가 난다.
+    # (urllib/http/email → updater.py·pathlib, difflib → 덱 퍼지매칭 등)
+    # tkinter만 안전하게 제외한다.
     excludes=[
         "tkinter",
-        "unittest",
-        "xmlrpc",
-        "email",
-        "html",
-        "http",
-        "urllib",   # updater.py가 직접 import하므로 제외하지 않음 — 아래 주석 참고
-        "pydoc",
-        "doctest",
-        "difflib",
-        "calendar",
-        "ftplib",
-        "imaplib",
-        "smtplib",
-        "poplib",
-        "telnetlib",
-        "socketserver",
-        "xmlrpc.server",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
-
-# urllib은 자동 업데이터에서 사용 — excludes에서 복원
-if "urllib" in a.excludes:
-    a.excludes.remove("urllib")
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
