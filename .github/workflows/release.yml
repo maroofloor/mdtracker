@@ -1,6 +1,6 @@
 name: Build & Release
 
-# v태그 푸시 시 자동 실행: git tag v0.2.0 && git push origin v0.2.0
+# v태그 푸시 시 자동 빌드/릴리스: git tag v0.2.0 && git push origin v0.2.0
 on:
   push:
     tags:

@@ -1,8 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 """
 MDTracker PyInstaller 스펙 파일
-빌드: pyinstaller MDTracker.spec
-출력: dist/MDTracker/
+빌드 명령: pyinstaller MDTracker.spec
+출력 경로: dist/MDTracker/
 """
 
 import sys

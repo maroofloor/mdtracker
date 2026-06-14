@@ -55,7 +55,7 @@ def main() -> None:
     win = MainWindow(db)
     win.show()
 
-    # 자동 업데이트 확인 (PyInstaller 빌드에서만 동작, 개발 환경 무시)
+    # 자동 업데이트 확인 (PyInstaller 빌드에서만 동작, 개발 환경에서는 무시)
     if "--no-update" not in sys.argv:
         from mdtracker.updater import check_update_async
         check_update_async(parent=win)

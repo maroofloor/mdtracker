@@ -27,7 +27,7 @@ from PySide6.QtWidgets import QMessageBox, QProgressDialog, QWidget
 from mdtracker import __version__
 
 # ── 설정 ──────────────────────────────────────────────────────────────────────
-# GitHub 저장소 정보 (본인 repo로 변경)
+# GitHub 저장소 정보
 GITHUB_OWNER = "maroofloor"
 GITHUB_REPO  = "mdtracker"
 API_URL      = f"https://api.github.com/repos/{GITHUB_OWNER}/{GITHUB_REPO}/releases/latest"

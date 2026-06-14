@@ -1,0 +1,6 @@
+chore(build): PyInstaller+Inno Setup 배포 파이프라인 및 자동 업데이트 추가
+
+- Python/Tesseract 미설치 환경에서 단독 실행 가능한 인스톨러 빌드
+- GitHub Releases 기반 자동 업데이트 모듈(updater.py) 추가
+- 태그 푸시 시 자동 빌드/릴리스하는 GitHub Actions 워크플로
+- 버전 0.2.0

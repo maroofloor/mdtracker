@@ -9,9 +9,9 @@
 ; ============================================================
 
 #define AppName      "MDTracker"
-#define AppVersion   "0.1.0"
+#define AppVersion   "0.2.0"
 #define AppPublisher "MDTracker"
-#define AppURL       "https://github.com/your-github-username/mdtracker"
+#define AppURL       "https://github.com/maroofloor/mdtracker"
 #define AppExeName   "MDTracker.exe"
 #define SourceDir    "..\dist\MDTracker"
 
