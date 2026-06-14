@@ -35,7 +35,8 @@ OutputBaseFilename=MDTracker_Setup_v{#AppVersion}
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
-PrivilegesRequired=lowest          ; 관리자 권한 불필요 (사용자 AppData 설치)
+; 관리자 권한 불필요 (사용자 AppData 설치)
+PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
 ; 아이콘 (빌드 전 .ico 파일로 변환 권장)
