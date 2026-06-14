@@ -2,9 +2,28 @@
 
 Steam의 Yu-Gi-Oh! Master Duel 플레이 화면을 자동으로 인식해 코인토스 승패, 선공/후공, 듀얼 결과를 기록하고 통계로 정리해주는 Python GUI 앱입니다.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
+[![Download](https://img.shields.io/github/v/release/maroofloor/mdtracker?label=Download&logo=github)](https://github.com/maroofloor/mdtracker/releases/latest)
 ![Platform](https://img.shields.io/badge/Platform-Windows-lightgrey)
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue)
 ![License](https://img.shields.io/badge/License-MIT-green)
+
+---
+
+## 다운로드 (일반 사용자)
+
+**Python·Tesseract 설치 없이** 바로 사용할 수 있습니다.
+
+1. [최신 릴리스 페이지](https://github.com/maroofloor/mdtracker/releases/latest)에서 **`MDTracker_Setup_vX.Y.Z.exe`** 를 다운로드
+2. 실행 → 안내에 따라 설치 (관리자 권한 불필요)
+3. 시작 메뉴 또는 바탕화면의 **MDTracker** 아이콘으로 실행
+
+> Windows SmartScreen 경고가 뜨면 **추가 정보 → 실행**을 눌러 진행하세요. (코드 서명 인증서 미적용)
+
+### 업데이트
+
+앱 실행 시 새 버전이 있으면 자동으로 알림이 뜹니다. **지금 업데이트**를 누르면 최신 설치 파일을 내려받아 설치합니다. 수동으로는 위 릴리스 페이지에서 최신 버전을 받아 다시 설치하면 됩니다.
+
+> 소스에서 직접 실행하려는 개발자는 아래 [개발자용 설치](#개발자용-설치-소스에서-실행)를 참고하세요.
 
 ---
 
@@ -24,15 +43,17 @@ Steam의 Yu-Gi-Oh! Master Duel 플레이 화면을 자동으로 인식해 코인
 | 항목 | 최소 사양 |
 |------|-----------|
 | OS | Windows 10 / 11 (64-bit) |
-| Python | 3.10 이상 |
-| Tesseract OCR | 5.x (한국어 학습 데이터 포함) |
 | 해상도 | 1920×1080 권장 (다른 해상도는 `ocr_config.json` 조정 필요) |
 
+> 일반 사용자는 Python·Tesseract를 따로 설치할 필요가 없습니다. 설치 파일에 모두 포함되어 있습니다.
+> 아래 Python 3.10+ / Tesseract 5.x 요구사항은 **소스에서 직접 빌드·실행하는 개발자에게만** 해당합니다.
 > macOS / Linux는 현재 미지원입니다.
 
 ---
 
-## 설치
+## 개발자용 설치 (소스에서 실행)
+
+> 일반 사용자는 이 섹션을 건너뛰고 위 [다운로드](#다운로드-일반-사용자)를 이용하세요.
 
 ### 1. Python 설치
 
@@ -51,7 +72,7 @@ Steam의 Yu-Gi-Oh! Master Duel 플레이 화면을 자동으로 인식해 코인
 ### 3. 리포지토리 클론
 
 ```bash
-git clone https://github.com/<your-username>/mdtracker.git
+git clone https://github.com/maroofloor/mdtracker.git
 cd mdtracker
 ```
 
@@ -215,6 +236,20 @@ mdtracker/
 # 통계 테스트
 .venv\Scripts\python.exe tests/test_filter_stats.py
 ```
+
+---
+
+## 빌드 & 배포 (관리자용)
+
+릴리스는 Git 태그 푸시로 자동화되어 있습니다. `mdtracker/__init__.py`의 `__version__`을 기준으로 GitHub Actions(`.github/workflows/release.yml`)가 PyInstaller 번들 → Tesseract 동봉 → Inno Setup 인스톨러 → GitHub Release 게시까지 수행합니다.
+
+```bash
+# 예: 0.2.1 릴리스
+git tag v0.2.1
+git push origin v0.2.1
+```
+
+태그를 푸시하면 Actions가 자동으로 `MDTracker_Setup_v0.2.1.exe`를 빌드해 릴리스에 첨부합니다. 버전 규칙(SemVer)·브랜치 전략은 `docs/github_versioning_plan.html`을, 로컬 빌드 절차는 `docs/build_guide.md`를 참고하세요.
 
 ---
 
