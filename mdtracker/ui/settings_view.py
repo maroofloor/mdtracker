@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import shutil
 import webbrowser
 
 from PySide6.QtCore import Qt, QUrl, Signal
@@ -207,6 +208,24 @@ class SettingsView(QWidget):
         ver_row.addWidget(check_btn)
         root.addLayout(ver_row)
 
+        # ── 데이터 관리 (백업 / 복원) ────────────────────────────
+        root.addWidget(self._section_label("데이터 관리"))
+        backup_row = QHBoxLayout()
+        backup_row.setSpacing(8)
+        backup_btn = QPushButton("데이터 백업")
+        backup_btn.setFixedWidth(110)
+        backup_btn.clicked.connect(self._backup_db)
+        restore_btn = QPushButton("데이터 복원")
+        restore_btn.setFixedWidth(110)
+        restore_btn.clicked.connect(self._restore_db)
+        backup_lbl = QLabel("DB 파일을 복사하여 백업·복원합니다. 복원 후 앱을 재시작하세요.")
+        backup_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 11px;")
+        backup_row.addWidget(backup_btn)
+        backup_row.addWidget(restore_btn)
+        backup_row.addWidget(backup_lbl)
+        backup_row.addStretch()
+        root.addLayout(backup_row)
+
         # ── 피드백 / 건의 ────────────────────────────────────────────
         root.addWidget(self._section_label("피드백 / 건의"))
         feedback_row = QHBoxLayout()
@@ -350,6 +369,43 @@ class SettingsView(QWidget):
                     _download_and_install(self, asset, tag)
         else:
             self._update_status_lbl.setText("최신 버전입니다 ✓")
+
+    def _backup_db(self) -> None:
+        from ..app_paths import default_db_path
+        db_src = default_db_path()
+        path, _ = QFileDialog.getSaveFileName(
+            self, "데이터 백업 저장", "mdtracker_backup.db",
+            "SQLite DB (*.db *.sqlite);;모든 파일 (*)")
+        if not path:
+            return
+        try:
+            shutil.copy2(str(db_src), path)
+            QMessageBox.information(self, "백업 완료",
+                f"백업 파일이 저장되었습니다:\n{path}")
+        except Exception as e:
+            QMessageBox.warning(self, "백업 실패", f"백업 중 오류가 발생했습니다:\n{e}")
+
+    def _restore_db(self) -> None:
+        from ..app_paths import default_db_path
+        db_dst = default_db_path()
+        yes = QMessageBox.StandardButton.Yes
+        if QMessageBox.warning(
+            self, "데이터 복원",
+            "기존 데이터를 모두 덮어씁니다.\n복원 후 앱을 재시작해야 합니다.\n\n계속할까요?",
+            yes | QMessageBox.StandardButton.No,
+        ) != yes:
+            return
+        path, _ = QFileDialog.getOpenFileName(
+            self, "복원할 백업 파일 선택", "",
+            "SQLite DB (*.db *.sqlite);;모든 파일 (*)")
+        if not path:
+            return
+        try:
+            shutil.copy2(path, str(db_dst))
+            QMessageBox.information(self, "복원 완료",
+                "복원이 완료되었습니다.\n앱을 재시작하면 복원된 데이터가 적용됩니다.")
+        except Exception as e:
+            QMessageBox.warning(self, "복원 실패", f"복원 중 오류가 발생했습니다:\n{e}")
 
     def _open_feedback(self) -> None:
         _open_feedback_url(self)

@@ -68,6 +68,9 @@ class FilterBar(QWidget):
         self.toss = self._add_combo(
             layout, "토스", self._with_all(COIN_TOSS_LABELS), width=64)
 
+        self.season = self._add_combo(
+            layout, "시즌", [(_ALL_LABEL, None)], width=80)
+
         self.reset_btn = QPushButton("초기화")
         self.reset_btn.setFixedHeight(24)
         self.reset_btn.clicked.connect(self.reset)
@@ -121,6 +124,15 @@ class FilterBar(QWidget):
         combo.setCurrentIndex(idx if idx >= 0 else 0)
         combo.blockSignals(False)
 
+
+    def set_season_options_from(self, matches: Sequence[Match]) -> None:
+        """기록에 등장한 시즌(YYYY-MM)으로 시즌 콤보 갱신 (선택 유지)."""
+        seasons = sorted(
+            {m.season for m in matches if m.season},
+            reverse=True  # 최신 시즌 먼저
+        )
+        self._set_options(self.season, seasons)
+
     def apply(self, matches: Sequence[Match]) -> list[Match]:
         """현재 조건으로 거른 list[Match] 반환 (stats.filter_matches 위임)."""
         return stats.filter_matches(
@@ -132,6 +144,7 @@ class FilterBar(QWidget):
             result=self.result.currentData(),
             coin_result=self.coin.currentData(),
             coin_toss=self.toss.currentData(),
+            season=self.season.currentData(),
         )
 
     def is_active(self) -> bool:
@@ -156,6 +169,7 @@ class FilterBar(QWidget):
             "result":   self.result.currentIndex(),
             "coin":     self.coin.currentIndex(),
             "toss":     self.toss.currentIndex(),
+            "season":   self.season.currentData(),
         }
 
     def apply_state(self, state: dict) -> None:
@@ -178,4 +192,5 @@ class FilterBar(QWidget):
         _set_index(self.result, "result")
         _set_index(self.coin, "coin")
         _set_index(self.toss, "toss")
+        _set_data(self.season, "season")
         self.changed.emit()

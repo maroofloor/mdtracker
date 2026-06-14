@@ -23,6 +23,9 @@ WIN     = "#22c55e"
 WIN_BG  = "#052e16"
 LOSE    = "#ef4444"
 LOSE_BG = "#fff1f2"
+LOSE_DARK = "#7f1d1d"   # 위험 동작 버튼 배경
+WIN_DARK  = "#16a34a"   # 내보내기 버튼 배경
+IMPORT_COLOR = "#0369a1"  # 가져오기 버튼 배경
 DRAW    = "#6b7280"
 DRAW_BG = "#f9fafb"
 

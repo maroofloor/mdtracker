@@ -6,6 +6,7 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
@@ -19,7 +20,10 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..styles.theme import ACCENT, BORDER, PANEL, SURFACE, SURFACE2, TEXT, TEXT2
+from ..styles.theme import (
+    ACCENT, BORDER, IMPORT_COLOR, LOSE_DARK, PANEL,
+    SURFACE, SURFACE2, TEXT, TEXT2, WIN_DARK,
+)
 
 _BTN = "border-radius: 8px; padding: 6px 14px; font-weight: bold; color: #fff; border: none;"
 
@@ -94,11 +98,11 @@ class DeckView(QWidget):
         self.del_btn = QPushButton("선택 삭제")
         self.del_btn.setStyleSheet(f"background: #ef4444; {_BTN}")
         self.del_all_btn = QPushButton("전체 삭제")
-        self.del_all_btn.setStyleSheet(f"background: #7f1d1d; {_BTN}")
+        self.del_all_btn.setStyleSheet(f"background: {LOSE_DARK}; {_BTN}")
         self.export_btn = QPushButton("⬇ 엑셀 내보내기")
-        self.export_btn.setStyleSheet(f"background: #16a34a; {_BTN}")
+        self.export_btn.setStyleSheet(f"background: {WIN_DARK}; {_BTN}")
         self.import_btn = QPushButton("⬆ 엑셀 가져오기")
-        self.import_btn.setStyleSheet(f"background: #0369a1; {_BTN}")
+        self.import_btn.setStyleSheet(f"background: {IMPORT_COLOR}; {_BTN}")
         btn_row.addWidget(self.del_btn)
         btn_row.addWidget(self.del_all_btn)
         btn_row.addStretch()
