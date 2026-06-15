@@ -56,6 +56,17 @@ def main() -> None:
         app.setWindowIcon(QIcon(str(_icon_path)))
     from mdtracker.styles.theme import apply_theme
     apply_theme(app)
+
+    # 첫 실행: 테마 선택 온보딩 (저장된 테마가 없을 때만, --check 제외)
+    if "--check" not in sys.argv:
+        from PySide6.QtCore import QSettings
+        _s = QSettings("MDTracker", "MDTracker")
+        if not _s.contains("theme"):
+            from mdtracker.ui.onboarding import OnboardingDialog
+            OnboardingDialog(app).exec()
+            if not _s.contains("theme"):
+                _s.setValue("theme", "minimal")
+
     win = MainWindow(db)
     win.show()
 

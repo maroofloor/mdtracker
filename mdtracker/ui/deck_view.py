@@ -147,6 +147,14 @@ class DeckView(QWidget):
         self._gallery.hide()
         root.addWidget(self._gallery, 1)
 
+        from .empty_state import EmptyState
+        self.empty_state = EmptyState(
+            icon="🗂", title="등록된 덱이 없습니다",
+            subtitle="위에 덱 이름을 입력해 추가하거나 ‘🎴 자동 매핑’으로 "
+                     "아트를 가져오세요.")
+        self.empty_state.hide()
+        root.addWidget(self.empty_state, 1)
+
         # ── 하단 버튼 ─────────────────────────────────────────────
         btn_row = QHBoxLayout()
         self.gallery_btn = QPushButton("🖼 갤러리")
@@ -228,6 +236,11 @@ class DeckView(QWidget):
         finally:
             self._loading = False
         self._filter(self.search.text())
+        empty = self.table.rowCount() == 0
+        self.empty_state.setVisible(empty)
+        gallery_on = self.gallery_btn.isChecked()
+        self.table.setVisible(not empty and not gallery_on)
+        self._gallery.setVisible(not empty and gallery_on)
 
     def _filter(self, text: str) -> None:
         q = text.strip().lower()

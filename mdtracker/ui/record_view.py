@@ -322,7 +322,7 @@ class DeckComboDelegate(QStyledItemDelegate):
         painter.setPen(QColor("#f1f5f9"))
         painter.drawText(
             option.rect.adjusted(8, 0, -8, 0),
-            Qt.AlignmentFlag.AlignVCenter,
+            Qt.AlignmentFlag.AlignCenter,
             text,
         )
         painter.restore()
@@ -633,6 +633,17 @@ class RecordView(QWidget):
 
         root.addWidget(self.table, 1)
 
+        from .empty_state import EmptyState
+        self.empty_state = EmptyState(
+            icon="🃏", title="아직 기록이 없습니다",
+            subtitle="‘● 자동 기록’을 켜거나 위의 + 버튼으로 첫 매치를 기록해보세요.")
+        self.empty_state.hide()
+        root.addWidget(self.empty_state, 1)
+
+        # 전체 삭제 Undo 토스트 (RecordView 위에 떠 있는 오버레이)
+        self._undo_toast = _UndoToast(self)
+        self._undo_toast.hide()
+
         # ── 시그널 연결 ───────────────────────────────────────────
         self.ocr_btn.toggled.connect(self._on_ocr_toggle)
         self.add_btn.clicked.connect(self._on_add_manual)
@@ -653,6 +664,7 @@ class RecordView(QWidget):
         self.filter_bar.set_deck_options_from(self.db.matches.all())
         self.filter_bar.set_season_options_from(self.db.matches.all())
         self._reload_table()
+        self._update_empty_state()
         self._update_today_lbl()
         self._update_mini_kpi()
         # 기록에 등장하는 덱들의 대표 카드 아트를 백그라운드로 확보
@@ -662,7 +674,25 @@ class RecordView(QWidget):
     def _on_filter_changed(self) -> None:
         """필터 조건 변경 — 테이블·미니 KPI만 다시 그린다 (데이터 불변)."""
         self._reload_table()
+        self._update_empty_state()
         self._update_mini_kpi()
+
+    def _update_empty_state(self) -> None:
+        """기록이 없으면 빈 상태 안내, 있으면 표를 보여준다."""
+        if self.table.rowCount() > 0:
+            self.table.setVisible(True)
+            self.empty_state.setVisible(False)
+            return
+        if len(self.db.matches.all()) == 0:
+            self.empty_state.set_text(
+                icon="🃏", title="아직 기록이 없습니다",
+                subtitle="‘● 자동 기록’을 켜거나 위의 + 버튼으로 첫 매치를 기록해보세요.")
+        else:
+            self.empty_state.set_text(
+                icon="🔍", title="조건에 맞는 기록이 없습니다",
+                subtitle="필터를 초기화하면 모든 기록을 볼 수 있어요.")
+        self.table.setVisible(False)
+        self.empty_state.setVisible(True)
 
     def _update_mini_kpi(self) -> None:
         from .. import stats as _stats

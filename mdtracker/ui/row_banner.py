@@ -87,12 +87,13 @@ def _build(my_name, my_pix, opp_name, opp_pix, w, h, split=0.5) -> QPixmap:
     p = QPainter(pm)
     p.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
 
-    art_w = max(1, min(int(h * 1.8), w // 2 + int(h * 0.5)))
+    # 아트는 양 바깥쪽에 붙이고 가운데(글씨 영역)는 비워 둔다.
+    art_w = max(1, min(int(h * 1.3), max(1, w // 2 - 16)))
     _draw_side(p, my_name, my_pix, 0, art_w, h, "right")        # 내 덱(좌)
     _draw_side(p, opp_name, opp_pix, w - art_w, art_w, h, "left")  # 상대(우)
 
-    # 가독성용 옅은 어두운 오버레이 (가운데 비는 부분은 배경색이 비침)
-    p.fillRect(QRectF(0, 0, w, h), QColor(0, 0, 0, 70))
+    # 가독성용 어두운 오버레이 (글씨가 잘 보이도록 진하게)
+    p.fillRect(QRectF(0, 0, w, h), QColor(0, 0, 0, 115))
     p.end()
     return pm
 
