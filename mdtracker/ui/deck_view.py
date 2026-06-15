@@ -11,6 +11,8 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -19,6 +21,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QMessageBox,
     QPushButton,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -56,6 +59,7 @@ class DeckView(QWidget):
         self.db = db
         self.art = CardArtService(db.decks)
         self._avatars: dict[str, DeckAvatar] = {}
+        self._gallery_avatars: dict[str, DeckAvatar] = {}
         self._fetcher = ArtFetcher(self.art, self)
         self._fetcher.fetched.connect(self._on_art_fetched)
         self._loading = False
@@ -127,8 +131,28 @@ class DeckView(QWidget):
         self.table.verticalHeader().setDefaultSectionSize(46)
         root.addWidget(self.table, 1)
 
+        # ── 갤러리 (아트 카드 그리드) ─────────────────────────────
+        self._gallery = QScrollArea()
+        self._gallery.setWidgetResizable(True)
+        self._gallery.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._gallery.setStyleSheet("background: transparent;")
+        gal_container = QWidget()
+        gal_container.setStyleSheet("background: transparent;")
+        self._gallery_grid = QGridLayout(gal_container)
+        self._gallery_grid.setContentsMargins(4, 4, 4, 4)
+        self._gallery_grid.setSpacing(12)
+        self._gallery_grid.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._gallery.setWidget(gal_container)
+        self._gallery.hide()
+        root.addWidget(self._gallery, 1)
+
         # ── 하단 버튼 ─────────────────────────────────────────────
         btn_row = QHBoxLayout()
+        self.gallery_btn = QPushButton("🖼 갤러리")
+        self.gallery_btn.setCheckable(True)
+        self.gallery_btn.setStyleSheet(f"background: {SURFACE2}; {_BTN}")
+        btn_row.addWidget(self.gallery_btn)
         self.auto_btn = QPushButton("🎴 자동 매핑")
         self.auto_btn.setStyleSheet(f"background: {ACCENT}; {_BTN}")
         self.auto_btn.setToolTip(
@@ -149,6 +173,7 @@ class DeckView(QWidget):
         btn_row.addWidget(self.import_btn)
         root.addLayout(btn_row)
 
+        self.gallery_btn.toggled.connect(self._on_toggle_gallery)
         self.auto_btn.clicked.connect(self._on_auto_map)
         self.add_btn.clicked.connect(self._on_add)
         self.name_edit.returnPressed.connect(self._on_add)
@@ -210,6 +235,9 @@ class DeckView(QWidget):
             item = self.table.item(row, 2)
             hide = bool(q and item and q not in item.text().lower())
             self.table.setRowHidden(row, hide)
+        if getattr(self, "_gallery", None) is not None and \
+                self._gallery.isVisible():
+            self._build_gallery()
 
     def _on_item_changed(self, item: QTableWidgetItem) -> None:
         if self._loading:
@@ -252,9 +280,77 @@ class DeckView(QWidget):
     # ── 카드 아트 ────────────────────────────────────────────────────
 
     def _on_art_fetched(self, deck_name: str, path: str) -> None:
-        avatar = self._avatars.get(deck_name)
-        if avatar is not None and path:
-            avatar.set_image(path)
+        if not path:
+            return
+        for amap in (self._avatars, self._gallery_avatars):
+            av = amap.get(deck_name)
+            if av is not None:
+                av.set_image(path)
+
+    # ── 갤러리 ───────────────────────────────────────────────────────
+
+    def _on_toggle_gallery(self, on: bool) -> None:
+        self.gallery_btn.setText("📋 목록" if on else "🖼 갤러리")
+        self.table.setVisible(not on)
+        self._gallery.setVisible(on)
+        self.del_btn.setEnabled(not on)   # 선택 삭제는 목록 모드 전용
+        if on:
+            self._build_gallery()
+
+    def _build_gallery(self) -> None:
+        while self._gallery_grid.count():
+            item = self._gallery_grid.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self._gallery_avatars = {}
+        q = self.search.text().strip().lower()
+        decks = [d for d in self.db.decks.list()
+                 if not q or q in d.name.lower()]
+        vw = self._gallery.viewport().width()
+        cols = max(1, vw // 132)
+        for i, d in enumerate(decks):
+            self._gallery_grid.addWidget(
+                self._make_gallery_card(d), i // cols, i % cols)
+
+    def _make_gallery_card(self, d) -> QFrame:
+        card = QFrame()
+        card.setFixedSize(120, 156)
+        card.setStyleSheet(
+            f"QFrame {{ background: {PANEL}; border: 1px solid {BORDER};"
+            "border-radius: 10px; }}")
+        v = QVBoxLayout(card)
+        v.setContentsMargins(8, 10, 8, 8)
+        v.setSpacing(6)
+
+        avatar = DeckAvatar(d.name, self.art.local_path(d.name), size=84)
+        avatar.clicked.connect(lambda n=d.name: self._assign_art(n))
+        self._gallery_avatars[d.name] = avatar
+        self._fetcher.request(d.name)
+        arow = QHBoxLayout()
+        arow.setContentsMargins(0, 0, 0, 0)
+        arow.addStretch()
+        arow.addWidget(avatar)
+        arow.addStretch()
+        v.addLayout(arow)
+
+        name = QLabel(d.name)
+        name.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        name.setWordWrap(True)
+        name.setStyleSheet(
+            f"color:{TEXT}; font-size:12px; font-weight:600; border:none;"
+            "background:transparent;")
+        v.addWidget(name)
+
+        if d.is_mine:
+            mine = QLabel("내 덱")
+            mine.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            mine.setStyleSheet(
+                f"color:{ACCENT}; font-size:10px; font-weight:700; border:none;"
+                "background:transparent;")
+            v.addWidget(mine)
+        v.addStretch()
+        return card
 
     def _assign_art(self, deck_name: str) -> None:
         dlg = _CardSearchDialog(self, self.art, deck_name)
