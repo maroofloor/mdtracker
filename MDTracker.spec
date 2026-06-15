@@ -92,7 +92,7 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon="assets/icon.png",  # .ico 변환 후 교체 권장
+    icon="assets/icon.ico",  # 다중 크기 .ico (작업표시줄/탐색기 아이콘)
     version="version_info.txt",  # 파일 존재 시 버전 리소스 삽입
 )
 

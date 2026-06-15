@@ -47,7 +47,11 @@ def main() -> None:
     db = Database(DB_PATH)
 
     app = QApplication(sys.argv)
-    _icon_path = Path(__file__).parent / "assets" / "icon.png"
+    # 작업표시줄은 작은 크기 아이콘을 요구하므로 다중 크기를 담은 .ico를 우선 사용한다.
+    _assets = Path(__file__).parent / "assets"
+    _icon_path = _assets / "icon.ico"
+    if not _icon_path.exists():
+        _icon_path = _assets / "icon.png"
     if _icon_path.exists():
         app.setWindowIcon(QIcon(str(_icon_path)))
     from mdtracker.styles.theme import apply_theme

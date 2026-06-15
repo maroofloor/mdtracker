@@ -17,7 +17,11 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-_ICON_PATH = Path(__file__).parent.parent.parent / "assets" / "icon.png"
+_ASSETS_DIR = Path(__file__).parent.parent.parent / "assets"
+# 작업표시줄용 작은 크기를 담은 .ico 우선, 없으면 png 폴백
+_ICON_PATH = _ASSETS_DIR / "icon.ico"
+if not _ICON_PATH.exists():
+    _ICON_PATH = _ASSETS_DIR / "icon.png"
 
 from ..styles.theme import set_ui_scale
 from .dashboard_view import DashboardView

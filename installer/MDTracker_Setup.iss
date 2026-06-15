@@ -39,8 +39,8 @@ WizardStyle=modern
 PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 
-; 아이콘 (빌드 전 .ico 파일로 변환 권장)
-; SetupIconFile=..\assets\icon.ico
+; 아이콘 (다중 크기 .ico)
+SetupIconFile=..\assets\icon.ico
 
 ; 버전 정보
 VersionInfoVersion={#AppVersion}
