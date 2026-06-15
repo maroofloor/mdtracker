@@ -20,9 +20,11 @@ from PySide6.QtWidgets import (
 )
 
 from .. import stats
+from ..styles import theme
 from ..styles.theme import (
     ACCENT, BG, BORDER, LOSE, PANEL, TEXT, TEXT2, WIN,
 )
+from .chart_theme import distribution_palette, style_plot
 from .labels import fmt_pct
 
 MIN_RELIABLE_N = 30
@@ -35,9 +37,10 @@ _PALETTE = ["#4361ee", "#f97316", "#22c55e", "#eab308", "#a855f7",
 
 
 def _wr_color(win_rate) -> str:
+    t = theme.active()
     if win_rate is None:
-        return TEXT2
-    return WIN if win_rate >= 0.5 else LOSE
+        return t.text2
+    return t.win if win_rate >= 0.5 else t.lose
 
 
 def _tier_of(cum_share: float) -> str:
@@ -67,12 +70,13 @@ class _DonutWidget(QWidget):
         self.setMinimumSize(220, 220)
 
     def set_data(self, dist: list) -> None:
+        palette = distribution_palette()
         segs = []
-        for i, d in enumerate(dist[:len(_PALETTE) - 1]):
-            segs.append((d["deck"], d["share"], _PALETTE[i % len(_PALETTE)]))
-        rest = sum(d["share"] for d in dist[len(_PALETTE) - 1:])
+        for i, d in enumerate(dist[:len(palette) - 1]):
+            segs.append((d["deck"], d["share"], palette[i % len(palette)]))
+        rest = sum(d["share"] for d in dist[len(palette) - 1:])
         if rest > 0:
-            segs.append(("기타", rest, "#475569"))
+            segs.append(("기타", rest, theme.active().border))
         self._segments = segs
         self.update()
 
@@ -93,7 +97,7 @@ class _DonutWidget(QWidget):
             start += span
         # 가운데 구멍
         hole = size * 0.55
-        p.setBrush(QColor(BG))
+        p.setBrush(QColor(theme.active().bg))
         p.drawEllipse(QRectF((w - hole) / 2, (h - hole) / 2, hole, hole))
 
 
@@ -102,6 +106,7 @@ class MetaView(QWidget):
         super().__init__()
         self.db = db
         self._matches = matches_provider or db.matches.all
+        theme.theme_notifier.changed.connect(lambda *_: self.refresh())
         self._build()
         self.refresh()
 
@@ -147,11 +152,7 @@ class MetaView(QWidget):
 
         # 막대 (pyqtgraph)
         self.plot = pg.PlotWidget()
-        self.plot.setBackground(BG)
-        for axis in ("left", "bottom"):
-            ax = self.plot.getAxis(axis)
-            ax.setPen(pg.mkPen(BORDER))
-            ax.setTextPen(pg.mkPen(TEXT2))
+        style_plot(self.plot)
         body.addWidget(self.plot, 1)
 
         # 도넛
@@ -215,6 +216,7 @@ class MetaView(QWidget):
             return
 
         self.plot.clear()
+        style_plot(self.plot)
         if not tiered:
             return
         ys = list(range(len(tiered)))
@@ -228,7 +230,7 @@ class MetaView(QWidget):
                 for i in ys]
         else:
             widths = [d["count"] for d in tiered]
-            brushes = [QColor(ACCENT) for _ in tiered]
+            brushes = [QColor(theme.active().accent) for _ in tiered]
             self.plot.setLabel("bottom", "횟수")
             tick_labels = [(i, tiered[i]["deck"]) for i in ys]
         bars = pg.BarGraphItem(x0=0, y=ys, height=0.6, width=widths,

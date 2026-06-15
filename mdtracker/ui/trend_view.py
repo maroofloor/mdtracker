@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
 )
 
 from .. import stats
+from ..styles import theme
 from ..styles.theme import BG, BORDER, TEXT2
+from .chart_theme import baseline_pen, series_pens, style_plot
 
 ROLL_WINDOW = 20
 
@@ -28,6 +30,7 @@ class TrendView(QWidget):
         super().__init__()
         self.db = db
         self._matches = matches_provider or db.matches.all
+        theme.theme_notifier.changed.connect(lambda *_: self.refresh())
         self._build()
         self.refresh()
 
@@ -119,6 +122,11 @@ class TrendView(QWidget):
         self.rank_plot.clear()
         self.count_plot.clear()
 
+        # 테마 색 재적용 (테마 전환 시 갱신)
+        for pl in (self.plot, self.rank_plot, self.count_plot):
+            style_plot(pl)
+        self._baseline.setPen(baseline_pen())
+
         if game_mode:
             self._render_game(t)
         else:
@@ -143,10 +151,11 @@ class TrendView(QWidget):
         xs = [_ord(p) for p in points]
         cumulative = [(p["cumulative_win_rate"] or 0) * 100 for p in points]
         daily = [(p["win_rate"] or 0) * 100 for p in points]
+        main_c, _sec = series_pens()
         self.plot.plot(xs, cumulative, name="누적 승률",
-                       pen=pg.mkPen("#1565c0", width=2.5))
+                       pen=pg.mkPen(main_c, width=2.5))
         self.plot.plot(xs, daily, name="구간 승률",
-                       pen=pg.mkPen("#cccccc", width=1.5))
+                       pen=pg.mkPen(theme.active().text2, width=1.5))
 
         tips = []
         for p in points:
@@ -161,7 +170,7 @@ class TrendView(QWidget):
 
         counts = [p["n"] for p in points]
         self.count_plot.addItem(pg.BarGraphItem(
-            x=xs, height=counts, width=0.7, brush="#1565c0", pen=pg.mkPen(None)))
+            x=xs, height=counts, width=0.7, brush=main_c, pen=pg.mkPen(None)))
 
     def _render_game(self, t: dict) -> None:
         self.plot.setLabel("bottom", "게임 수")
@@ -171,15 +180,16 @@ class TrendView(QWidget):
         xs = [g["index"] for g in gp]
         cumulative = [g["cumulative_win_rate"] * 100 for g in gp]
         rolling = [g["rolling_win_rate"] * 100 for g in gp]
+        main_c, sec = series_pens()
         self.plot.plot(xs, cumulative, name="누적 승률",
-                       pen=pg.mkPen("#1565c0", width=2.5))
+                       pen=pg.mkPen(main_c, width=2.5))
         self.plot.plot(xs, rolling, name=f"롤링 {ROLL_WINDOW}전",
-                       pen=pg.mkPen("#f59e0b", width=2))
+                       pen=pg.mkPen(sec, width=2))
         tips = [
             f"#{g['index']} {g['result']}\n누적 {self._pct(g['cumulative_win_rate'])}"
             f" / 롤링 {self._pct(g['rolling_win_rate'])}"
             for g in gp]
-        self._add_hover_points(xs, rolling, tips, "#f59e0b")
+        self._add_hover_points(xs, rolling, tips, sec)
         self.plot.getAxis("bottom").setTicks([])     # 자동 정수 틱
 
     def _render_rank(self, t: dict, *, visible: bool) -> None:
@@ -208,9 +218,10 @@ class TrendView(QWidget):
             ys.append(level[label])
         if not xs:
             return
+        sec = theme.active().second
         self.rank_plot.plot(xs, ys, stepMode=False,
-                            pen=pg.mkPen("#f59e0b", width=2),
-                            symbol="o", symbolSize=6, symbolBrush="#f59e0b")
+                            pen=pg.mkPen(sec, width=2),
+                            symbol="o", symbolSize=6, symbolBrush=sec)
         self.rank_plot.getAxis("left").setTicks(
             [[(lvl, lbl) for lbl, lvl in level.items()]])
 
