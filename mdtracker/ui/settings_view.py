@@ -7,6 +7,8 @@ import webbrowser
 
 from PySide6.QtCore import Qt, QUrl, Signal
 from PySide6.QtWidgets import (
+    QApplication,
+    QButtonGroup,
     QCheckBox,
     QDialog,
     QFileDialog,
@@ -21,7 +23,10 @@ from PySide6.QtWidgets import (
 )
 
 from ..ocr.config import OcrConfig, default_config_path
-from ..styles.theme import BORDER, TEXT, TEXT2
+from ..styles.theme import (
+    BORDER, TEXT, TEXT2,
+    available_themes, get_active_theme, set_theme,
+)
 
 
 def _open_feedback_url(parent=None) -> None:
@@ -108,6 +113,10 @@ class SettingsView(QWidget):
         title.setStyleSheet(
             f"color: {TEXT}; font-size: 18px; font-weight: 700;")
         root.addWidget(title)
+
+        # ── 테마 ────────────────────────────────────────────────────
+        root.addWidget(self._section_label("테마"))
+        self._build_theme_section(root)
 
         # ── 창 크기 프리셋 ──────────────────────────────────────────
         root.addWidget(self._section_label("창 크기 프리셋"))
@@ -241,6 +250,43 @@ class SettingsView(QWidget):
         root.addLayout(feedback_row)
 
         root.addStretch()
+
+    # ── 테마 선택 ────────────────────────────────────────────────────
+
+    def _build_theme_section(self, root) -> None:
+        row = QHBoxLayout()
+        row.setSpacing(8)
+        self._theme_group = QButtonGroup(self)
+        self._theme_group.setExclusive(True)
+        self._theme_buttons: dict[str, QPushButton] = {}
+        active_id = get_active_theme().id
+        for t in available_themes():
+            btn = QPushButton(t.name)
+            btn.setCheckable(True)
+            btn.setMinimumWidth(120)
+            btn.setToolTip(t.description)
+            btn.setChecked(t.id == active_id)
+            btn.clicked.connect(
+                lambda _checked=False, tid=t.id: self._on_theme_selected(tid))
+            self._theme_group.addButton(btn)
+            self._theme_buttons[t.id] = btn
+            row.addWidget(btn)
+        row.addStretch()
+        root.addLayout(row)
+
+        hint = QLabel(
+            "선택 즉시 적용됩니다. 일부 화면(기록 표 등)은 앱을 재시작하면 "
+            "완전히 반영됩니다.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {TEXT2}; font-size: 11px;")
+        root.addWidget(hint)
+
+    def _on_theme_selected(self, theme_id: str) -> None:
+        set_theme(QApplication.instance(), theme_id)
+        # 활성 테마 기준으로 체크 상태 재동기화
+        current = get_active_theme().id
+        for tid, btn in getattr(self, "_theme_buttons", {}).items():
+            btn.setChecked(tid == current)
 
     # ── OCR 설정 헬퍼 ────────────────────────────────────────────────
 
