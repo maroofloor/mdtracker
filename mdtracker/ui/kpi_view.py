@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QHeaderView,
     QLabel,
+    QScrollArea,
     QTableWidget,
     QTableWidgetItem,
     QVBoxLayout,
@@ -19,9 +20,13 @@ from PySide6.QtWidgets import (
 )
 
 from .. import stats
+from ..cardart.service import CardArtService
 from ..styles.theme import (
     ACCENT, BG, BORDER, LOSE, PANEL, SURFACE, SURFACE2, TEXT, TEXT2, WIN,
 )
+from .art_fetch import ArtFetcher
+from .deck_avatar import DeckAvatar
+from .donut import CoinGauge, DonutGauge
 from .labels import fmt_pct
 
 
@@ -163,6 +168,10 @@ class KpiView(QWidget):
         self.db = db
         # 대시보드 공통 필터를 거친 list[Match] 공급자 (기본: 전체)
         self._matches = matches_provider or db.matches.all
+        self.art = CardArtService(db.decks)
+        self._deck_avatars: dict[str, DeckAvatar] = {}
+        self._fetcher = ArtFetcher(self.art, self)
+        self._fetcher.fetched.connect(self._on_art_fetched)
         self._build()
         self.refresh()
 
@@ -170,6 +179,37 @@ class KpiView(QWidget):
         root = QVBoxLayout(self)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(12)
+
+        # ── 히어로 밴드: 승률 도넛 + 스트릭 + 코인 게이지 ──────────
+        hero = QHBoxLayout()
+        hero.setSpacing(20)
+        self.donut = DonutGauge(168)
+        hero.addWidget(self.donut)
+
+        right = QVBoxLayout()
+        right.setSpacing(6)
+        right.addStretch(1)
+        hero_title = QLabel("전체 승률")
+        hero_title.setStyleSheet(
+            f"color:{TEXT2}; font-size:12px; font-weight:600; border:none;")
+        right.addWidget(hero_title)
+        self.hero_streak = QLabel("—")
+        self.hero_streak.setStyleSheet(
+            f"color:{TEXT}; font-size:20px; font-weight:700; border:none;")
+        right.addWidget(self.hero_streak)
+        coin_title = QLabel("코인토스 (50% 기준)")
+        coin_title.setStyleSheet(
+            f"color:{TEXT2}; font-size:11px; border:none; padding-top:6px;")
+        right.addWidget(coin_title)
+        self.coin_gauge = CoinGauge()
+        right.addWidget(self.coin_gauge)
+        self.hero_coin = QLabel("—")
+        self.hero_coin.setStyleSheet(
+            f"color:{TEXT2}; font-size:11px; border:none;")
+        right.addWidget(self.hero_coin)
+        right.addStretch(1)
+        hero.addLayout(right, 1)
+        root.addLayout(hero)
 
         # ── KPI 카드 3열 ─────────────────────────────────────────
         card_row = QHBoxLayout()
@@ -234,25 +274,24 @@ class KpiView(QWidget):
         root.addWidget(self.choice_lbl)
         root.addWidget(self.choice_rate_lbl)
 
-        # ── 내 덱별 승률 테이블 ──────────────────────────────────
+        # ── 내 덱별 승률 (아트 썸네일 + 가로 승률 바 리스트) ──────
         deck_title = QLabel("내 덱별 승률")
         deck_title.setStyleSheet(
             f"color:{TEXT2}; font-size:15px; font-weight:600;")
         root.addWidget(deck_title)
 
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["덱", "승", "패", "승률", "표본"])
-        self.table.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.table.verticalHeader().hide()
-        self.table.setShowGrid(False)
-        self.table.setAlternatingRowColors(False)
-        self.table.setStyleSheet(
-            f"QTableWidget {{ background: {PANEL}; }}"
-            f"QTableWidget::item {{ padding: 6px 10px; }}"
-            f"QHeaderView::section {{ background: {SURFACE}; color: {TEXT2};"
-            f"font-size:10px; }}")
-        root.addWidget(self.table, 1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        scroll.setStyleSheet("background: transparent;")
+        deck_container = QWidget()
+        deck_container.setStyleSheet("background: transparent;")
+        self._deck_box = QVBoxLayout(deck_container)
+        self._deck_box.setContentsMargins(0, 0, 0, 0)
+        self._deck_box.setSpacing(6)
+        self._deck_box.addStretch(1)
+        scroll.setWidget(deck_container)
+        root.addWidget(scroll, 1)
 
     # ── internal helpers ─────────────────────────────────────────
 
@@ -315,6 +354,17 @@ class KpiView(QWidget):
 
         self.overall_lbl.setText(f"전체  {_line(s_all['overall'])}")
 
+        # ── 히어로 갱신 (도넛 + 스트릭 + 코인 게이지) ──────────────
+        ov = s_all["overall"]
+        self.donut.set_data(ov["win_rate"], ov["wins"], ov["losses"], ov["n"])
+        t_all = stats.trend_series(all_matches)
+        self.hero_streak.setText(_streak_text(t_all["current_streak"]))
+        ctr_h = s_all["coin_toss_rate"]
+        self.coin_gauge.set_data(ctr_h["rate"], ctr_h["win"], ctr_h["n"])
+        self.hero_coin.setText(
+            f"{fmt_pct(ctr_h['rate'])}  ({ctr_h['win']}/{ctr_h['n']})"
+            if ctr_h["n"] else "기록 없음")
+
         def _pct(d: dict) -> str:
             return fmt_pct(d["win_rate"]) if d["n"] else "—"
 
@@ -356,18 +406,50 @@ class KpiView(QWidget):
 
         decks = sorted(s_all["by_my_deck"].items(),
                        key=lambda kv: kv[1]["n"], reverse=True)
-        self.table.setRowCount(len(decks))
-        for row, (deck, d) in enumerate(decks):
-            wr = d["win_rate"] or 0.0
-            wr_color = WIN if wr >= 0.5 else LOSE
-            values = [deck, str(d["wins"]), str(d["losses"]),
-                      fmt_pct(wr), str(d["n"])]
-            for col, val in enumerate(values):
-                item = QTableWidgetItem(val)
-                item.setForeground(
-                    QColor(wr_color) if col == 3 else QColor(TEXT))
-                item.setBackground(
-                    QColor(SURFACE) if row % 2 else QColor(SURFACE2))
-                if col > 0:
-                    item.setTextAlignment(Qt.AlignCenter)
-                self.table.setItem(row, col, item)
+        # 기존 행 제거 후 재구성
+        while self._deck_box.count():
+            item = self._deck_box.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        self._deck_avatars = {}
+        for deck, d in decks:
+            self._deck_box.addWidget(self._make_deck_row(deck, d))
+        self._deck_box.addStretch(1)
+
+    def _make_deck_row(self, deck: str, d: dict) -> QWidget:
+        wr = d["win_rate"] or 0.0
+        wr_color = WIN if wr >= 0.5 else LOSE
+        row = QWidget()
+        row.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(row)
+        h.setContentsMargins(4, 2, 4, 2)
+        h.setSpacing(10)
+
+        avatar = DeckAvatar(deck, self.art.local_path(deck), size=30)
+        self._deck_avatars[deck] = avatar
+        self._fetcher.request(deck)
+        h.addWidget(avatar)
+
+        name = QLabel(deck)
+        name.setFixedWidth(130)
+        name.setStyleSheet(
+            f"color:{TEXT}; font-size:13px; font-weight:600; border:none;")
+        h.addWidget(name)
+
+        bar = WinRateBar()
+        bar.setFixedHeight(8)
+        bar.set_rate(wr)
+        h.addWidget(bar, 1)
+
+        rec = QLabel(
+            f"{fmt_pct(wr)}  ({d['wins']}승 {d['losses']}패 · {d['n']}전)")
+        rec.setFixedWidth(170)
+        rec.setStyleSheet(f"color:{wr_color}; font-size:11px; border:none;")
+        h.addWidget(rec)
+        return row
+
+    def _on_art_fetched(self, deck_name: str, path: str) -> None:
+        avatar = self._deck_avatars.get(deck_name)
+        if avatar is not None and path:
+            avatar.set_image(path)
