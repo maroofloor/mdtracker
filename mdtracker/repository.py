@@ -207,3 +207,46 @@ class DeckRepository:
         names = self.list_names()
         hit = difflib.get_close_matches(raw, names, n=1, cutoff=cutoff)
         return hit[0] if hit else None
+
+    # ── 덱 대표 카드 아트 (deck_art) ──────────────────────────────────
+    # 덱명(문자열)으로 키잉하므로 decks 테이블 등록 여부와 무관하게 동작한다.
+
+    def get_art(self, deck_name: str) -> Optional[dict]:
+        """덱의 아트 매핑 행을 dict로 반환(없으면 None)."""
+        row = self.conn.execute(
+            "SELECT deck_name, card_id, query, source, image_path, updated_at "
+            "FROM deck_art WHERE deck_name = ?", (deck_name,),
+        ).fetchone()
+        return dict(row) if row else None
+
+    def set_art(
+        self, deck_name: str, *,
+        card_id: Optional[int] = None,
+        query: Optional[str] = None,
+        source: str = "auto",
+        image_path: Optional[str] = None,
+    ) -> None:
+        """덱의 아트 매핑을 upsert한다. source='manual'은 사용자 보정."""
+        from datetime import datetime
+        self.conn.execute(
+            """INSERT INTO deck_art
+               (deck_name, card_id, query, source, image_path, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?)
+               ON CONFLICT(deck_name) DO UPDATE SET
+                 card_id=excluded.card_id, query=excluded.query,
+                 source=excluded.source, image_path=excluded.image_path,
+                 updated_at=excluded.updated_at""",
+            (deck_name, card_id, query, source, image_path,
+             datetime.now().isoformat(timespec="seconds")),
+        )
+        self.conn.commit()
+
+    def clear_art(self, deck_name: str) -> None:
+        self.conn.execute(
+            "DELETE FROM deck_art WHERE deck_name = ?", (deck_name,))
+        self.conn.commit()
+
+    def all_art(self) -> dict[str, dict]:
+        """모든 덱 아트 매핑을 {deck_name: row_dict}로 반환."""
+        return {r["deck_name"]: dict(r)
+                for r in self.conn.execute("SELECT * FROM deck_art")}

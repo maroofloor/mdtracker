@@ -1,4 +1,4 @@
-"""덱 관리 뷰 — 체크박스 다중선택 삭제 + 전체삭제 + 엑셀 내보내기/가져오기."""
+"""덱 관리 뷰 — 대표 카드 아트 + 체크박스 다중선택 삭제 + 전체삭제 + 엑셀 내보내기/가져오기."""
 
 from __future__ import annotations
 
@@ -6,12 +6,17 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QCheckBox,
+    QDialog,
+    QDialogButtonBox,
     QFileDialog,
     QHBoxLayout,
     QHeaderView,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPushButton,
     QTableWidget,
@@ -20,18 +25,39 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..cardart import archetypes
+from ..cardart.service import CardArtService
 from ..styles.theme import (
     ACCENT, BORDER, IMPORT_COLOR, LOSE_DARK, PANEL,
     SURFACE, SURFACE2, TEXT, TEXT2, WIN_DARK,
 )
+from .art_fetch import ArtFetcher
+from .completer import make_deck_completer
+from .deck_avatar import DeckAvatar
 
 _BTN = "border-radius: 8px; padding: 6px 14px; font-weight: bold; color: #fff; border: none;"
+
+
+def _centered(widget: QWidget) -> QWidget:
+    """셀 내부에서 위젯을 가운데 정렬하는 투명 컨테이너."""
+    box = QWidget()
+    box.setStyleSheet("background: transparent;")
+    lay = QHBoxLayout(box)
+    lay.setContentsMargins(0, 0, 0, 0)
+    lay.addStretch()
+    lay.addWidget(widget)
+    lay.addStretch()
+    return box
 
 
 class DeckView(QWidget):
     def __init__(self, db) -> None:
         super().__init__()
         self.db = db
+        self.art = CardArtService(db.decks)
+        self._avatars: dict[str, DeckAvatar] = {}
+        self._fetcher = ArtFetcher(self.art, self)
+        self._fetcher.fetched.connect(self._on_art_fetched)
         self._loading = False
         self._build()
         self.refresh()
@@ -57,6 +83,9 @@ class DeckView(QWidget):
         self.name_edit.setStyleSheet(
             f"background: {SURFACE}; color: {TEXT}; border: 1px solid {BORDER};"
             "border-radius: 8px; padding: 6px 12px;")
+        self.name_edit.setCompleter(make_deck_completer(
+            self.art.db.all_display_names()
+            + [d.name for d in self.db.decks.list()], self))
         self.add_btn = QPushButton("+ 추가")
         self.add_btn.setStyleSheet(f"background: {ACCENT}; {_BTN}")
         self.mine_check = QCheckBox("내 덱")
@@ -68,20 +97,25 @@ class DeckView(QWidget):
         root.addLayout(add_row)
 
         # ── 안내 텍스트 ───────────────────────────────────────────
-        hint = QLabel("'내 덱' 열 체크박스로 내 덱 여부 설정 · '선택' 열 체크 후 선택 삭제")
+        hint = QLabel(
+            "아트 더블클릭 → 대표 카드 지정 · '내 덱' 체크로 내 덱 설정 · "
+            "'선택' 체크 후 선택 삭제")
         hint.setStyleSheet(f"color: {TEXT2}; font-size: 11px;")
         root.addWidget(hint)
 
-        # ── 테이블 (선택 / 덱 이름 / 내 덱) ──────────────────────
-        self.table = QTableWidget(0, 3)
-        self.table.setHorizontalHeaderLabels(["선택", "덱 이름", "내 덱"])
+        # ── 테이블 (아트 / 선택 / 덱 이름 / 내 덱) ────────────────
+        self.table = QTableWidget(0, 4)
+        self.table.setHorizontalHeaderLabels(["아트", "선택", "덱 이름", "내 덱"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.DoubleClicked)
         self.table.setSelectionMode(QAbstractItemView.NoSelection)
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.Fixed)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Fixed)
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.Fixed)
+        header.setSectionResizeMode(2, QHeaderView.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.Fixed)
         self.table.setColumnWidth(0, 52)
-        self.table.setColumnWidth(2, 72)
+        self.table.setColumnWidth(1, 52)
+        self.table.setColumnWidth(3, 72)
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
         self.table.setStyleSheet(
@@ -90,11 +124,15 @@ class DeckView(QWidget):
             f"QHeaderView::section {{ background: {SURFACE}; color: {TEXT2};"
             f"font-size: 11px; border: none; border-bottom: 1px solid {BORDER};"
             "padding: 6px 12px; }}")
-        self.table.verticalHeader().setDefaultSectionSize(38)
+        self.table.verticalHeader().setDefaultSectionSize(46)
         root.addWidget(self.table, 1)
 
         # ── 하단 버튼 ─────────────────────────────────────────────
         btn_row = QHBoxLayout()
+        self.auto_btn = QPushButton("🎴 자동 매핑")
+        self.auto_btn.setStyleSheet(f"background: {ACCENT}; {_BTN}")
+        self.auto_btn.setToolTip(
+            "매핑표에 있는 덱의 대표 카드 아트를 자동으로 가져옵니다(네트워크).")
         self.del_btn = QPushButton("선택 삭제")
         self.del_btn.setStyleSheet(f"background: #ef4444; {_BTN}")
         self.del_all_btn = QPushButton("전체 삭제")
@@ -103,6 +141,7 @@ class DeckView(QWidget):
         self.export_btn.setStyleSheet(f"background: {WIN_DARK}; {_BTN}")
         self.import_btn = QPushButton("⬆ 엑셀 가져오기")
         self.import_btn.setStyleSheet(f"background: {IMPORT_COLOR}; {_BTN}")
+        btn_row.addWidget(self.auto_btn)
         btn_row.addWidget(self.del_btn)
         btn_row.addWidget(self.del_all_btn)
         btn_row.addStretch()
@@ -110,6 +149,7 @@ class DeckView(QWidget):
         btn_row.addWidget(self.import_btn)
         root.addLayout(btn_row)
 
+        self.auto_btn.clicked.connect(self._on_auto_map)
         self.add_btn.clicked.connect(self._on_add)
         self.name_edit.returnPressed.connect(self._on_add)
         self.del_btn.clicked.connect(self._on_delete)
@@ -121,10 +161,20 @@ class DeckView(QWidget):
     def refresh(self) -> None:
         self._loading = True
         try:
+            self._avatars = {}
             decks = self.db.decks.list()   # is_mine DESC, name ASC
             self.table.setRowCount(len(decks))
             for row, d in enumerate(decks):
                 row_bg = QColor(SURFACE) if row % 2 else QColor(SURFACE2)
+
+                # 아트 아바타 (더블클릭 → 대표 카드 지정)
+                avatar = DeckAvatar(d.name, self.art.local_path(d.name), size=34)
+                avatar.clicked.connect(
+                    lambda n=d.name: self._assign_art(n))
+                self.table.setCellWidget(row, 0, _centered(avatar))
+                self._avatars[d.name] = avatar
+                # 아트가 없고 매핑되는 덱이면 백그라운드로 자동 로드
+                self._fetcher.request(d.name)
 
                 # 선택 체크박스 (편집 불가)
                 sel_item = QTableWidgetItem()
@@ -132,7 +182,7 @@ class DeckView(QWidget):
                 sel_item.setTextAlignment(Qt.AlignCenter)
                 sel_item.setBackground(row_bg)
                 sel_item.setFlags(sel_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 0, sel_item)
+                self.table.setItem(row, 1, sel_item)
 
                 # 덱 이름 (더블클릭 인라인 편집 가능)
                 name_item = QTableWidgetItem(d.name)
@@ -140,15 +190,16 @@ class DeckView(QWidget):
                 name_item.setForeground(QColor(TEXT))
                 name_item.setBackground(row_bg)
                 name_item.setToolTip("더블클릭하여 이름 편집")
-                self.table.setItem(row, 1, name_item)
+                self.table.setItem(row, 2, name_item)
 
                 # 내 덱 체크박스 (편집 불가 — 클릭으로 토글)
                 mine_item = QTableWidgetItem()
                 mine_item.setCheckState(Qt.Checked if d.is_mine else Qt.Unchecked)
                 mine_item.setTextAlignment(Qt.AlignCenter)
                 mine_item.setBackground(row_bg)
-                mine_item.setFlags(mine_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
-                self.table.setItem(row, 2, mine_item)
+                mine_item.setFlags(
+                    mine_item.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                self.table.setItem(row, 3, mine_item)
         finally:
             self._loading = False
         self._filter(self.search.text())
@@ -156,7 +207,7 @@ class DeckView(QWidget):
     def _filter(self, text: str) -> None:
         q = text.strip().lower()
         for row in range(self.table.rowCount()):
-            item = self.table.item(row, 1)
+            item = self.table.item(row, 2)
             hide = bool(q and item and q not in item.text().lower())
             self.table.setRowHidden(row, hide)
 
@@ -164,9 +215,9 @@ class DeckView(QWidget):
         if self._loading:
             return
         col = item.column()
-        if col == 2:
+        if col == 3:
             # 내 덱 체크박스 토글
-            id_item = self.table.item(item.row(), 1)
+            id_item = self.table.item(item.row(), 2)
             if not id_item:
                 return
             deck_id = id_item.data(Qt.UserRole)
@@ -174,7 +225,7 @@ class DeckView(QWidget):
                 return
             self.db.decks.set_mine(deck_id, item.checkState() == Qt.Checked)
             self.refresh()
-        elif col == 1:
+        elif col == 2:
             # 덱 이름 인라인 편집
             deck_id = item.data(Qt.UserRole)
             new_name = item.text().strip()
@@ -189,14 +240,66 @@ class DeckView(QWidget):
         for row in range(self.table.rowCount()):
             if self.table.isRowHidden(row):
                 continue
-            sel_item = self.table.item(row, 0)
+            sel_item = self.table.item(row, 1)
             if sel_item and sel_item.checkState() == Qt.Checked:
-                name_item = self.table.item(row, 1)
+                name_item = self.table.item(row, 2)
                 if name_item:
                     did = name_item.data(Qt.UserRole)
                     if did is not None:
                         ids.append(did)
         return ids
+
+    # ── 카드 아트 ────────────────────────────────────────────────────
+
+    def _on_art_fetched(self, deck_name: str, path: str) -> None:
+        avatar = self._avatars.get(deck_name)
+        if avatar is not None and path:
+            avatar.set_image(path)
+
+    def _assign_art(self, deck_name: str) -> None:
+        dlg = _CardSearchDialog(self, self.art, deck_name)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        card = dlg.selected_card()
+        if not card:
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            path = self.art.assign_manual(deck_name, card)
+        finally:
+            QApplication.restoreOverrideCursor()
+        if not path:
+            QMessageBox.warning(
+                self, "지정 실패",
+                "카드 이미지를 내려받지 못했습니다. 네트워크를 확인해주세요.")
+        self.refresh()
+
+    def _on_auto_map(self) -> None:
+        decks = self.db.decks.list()
+        targets = [d for d in decks
+                   if self.art.local_path(d.name) is None
+                   and self.art.has_auto_mapping(d.name)]
+        if not targets:
+            QMessageBox.information(
+                self, "자동 매핑",
+                "자동 매핑할 덱이 없습니다.\n"
+                "(이미 아트가 있거나, 매핑표에 없는 덱입니다. "
+                "아트를 더블클릭해 수동 지정할 수 있습니다.)")
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        done = 0
+        try:
+            for d in targets:
+                if self.art.ensure(d.name):
+                    done += 1
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.refresh()
+        QMessageBox.information(
+            self, "자동 매핑 완료",
+            f"{done}개 덱에 카드 아트를 적용했습니다. (대상 {len(targets)}개)")
+
+    # ── 덱 CRUD ──────────────────────────────────────────────────────
 
     def _on_add(self) -> None:
         name = self.name_edit.text().strip()
@@ -275,6 +378,79 @@ class DeckView(QWidget):
                     if name and self.db.decks.add(name, is_mine=is_mine))
         self.refresh()
         QMessageBox.information(self, "완료", f"{added}개 덱을 가져왔습니다.")
+
+
+class _CardSearchDialog(QDialog):
+    """YGOPRODeck 카드명 검색 → 대표 카드 선택 다이얼로그(수동 보정)."""
+
+    def __init__(self, parent, art_service: CardArtService,
+                 deck_name: str) -> None:
+        super().__init__(parent)
+        self._art = art_service
+        self.setWindowTitle(f"대표 카드 지정 — {deck_name}")
+        self.resize(420, 460)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 16, 16, 16)
+        lay.setSpacing(10)
+
+        info = QLabel("카드명(영문/일부)으로 검색해 대표 카드를 고르세요.")
+        info.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
+        lay.addWidget(info)
+
+        search_row = QHBoxLayout()
+        self.edit = QLineEdit()
+        # 매핑표에 영문 아키타입이 있으면 프리필
+        self.edit.setText(archetypes.resolve_archetype(deck_name) or deck_name)
+        self.edit.setStyleSheet(
+            f"background: {SURFACE}; color: {TEXT}; border: 1px solid {BORDER};"
+            "border-radius: 6px; padding: 6px 10px;")
+        self.edit.returnPressed.connect(self._do_search)
+        search_btn = QPushButton("검색")
+        search_btn.setStyleSheet(f"background: {ACCENT}; {_BTN}")
+        search_btn.clicked.connect(self._do_search)
+        search_row.addWidget(self.edit, 1)
+        search_row.addWidget(search_btn)
+        lay.addLayout(search_row)
+
+        self.results = QListWidget()
+        self.results.setStyleSheet(
+            f"background: {PANEL}; color: {TEXT}; border: 1px solid {BORDER};"
+            "border-radius: 6px;")
+        self.results.itemDoubleClicked.connect(lambda _i: self.accept())
+        lay.addWidget(self.results, 1)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel)
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        lay.addWidget(buttons)
+
+    def _do_search(self) -> None:
+        term = self.edit.text().strip()
+        if not term:
+            return
+        QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
+        try:
+            cards = self._art.search(term)
+        finally:
+            QApplication.restoreOverrideCursor()
+        self.results.clear()
+        if not cards:
+            QMessageBox.information(
+                self, "검색 결과 없음",
+                "결과가 없습니다. 영문 카드명으로 다시 시도해보세요.")
+            return
+        for c in cards:
+            item = QListWidgetItem(c.get("name", "(이름 없음)"))
+            item.setData(Qt.UserRole, c)
+            self.results.addItem(item)
+        self.results.setCurrentRow(0)
+
+    def selected_card(self) -> dict | None:
+        item = self.results.currentItem()
+        return item.data(Qt.UserRole) if item else None
 
 
 def _read_deck_file(path: str) -> list[tuple[str, bool]]:

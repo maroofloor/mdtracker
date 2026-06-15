@@ -49,6 +49,29 @@ def default_ocr_config_path(
     return base / APP_DIR_NAME / "ocr_config.json"
 
 
+def default_cache_dir(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    """플랫폼별 캐시 디렉터리 (개인 캐시용, 번들/재배포 대상 아님)."""
+    current_platform = sys.platform if platform is None else platform
+    if current_platform == "win32":
+        return _windows_root(environ) / "cache"
+    env = _environ(environ)
+    base = Path(env.get("XDG_CACHE_HOME", Path.home() / ".cache"))
+    return base / APP_DIR_NAME
+
+
+def card_art_cache_dir(
+    *,
+    platform: str | None = None,
+    environ: Mapping[str, str] | None = None,
+) -> Path:
+    """YGOPRODeck 카드 이미지 로컬 캐시 경로 (cache/cardart)."""
+    return default_cache_dir(platform=platform, environ=environ) / "cardart"
+
+
 def application_root(
     *,
     frozen: bool | None = None,

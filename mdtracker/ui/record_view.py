@@ -646,6 +646,8 @@ class RecordView(QWidget):
             mine_names = self.db.decks.list_mine_names()   # is_mine=True만
             all_names  = self.db.decks.list_names()        # 전체
 
+            from .completer import make_deck_completer
+            catalog = self._catalog_names()
             for combo, names in (
                 (self.my_deck,       mine_names or all_names),  # 내 덱 없으면 전체 폴백
                 (self.sess_opp_deck, all_names),
@@ -654,6 +656,9 @@ class RecordView(QWidget):
                 combo.clear()
                 combo.addItems(names)
                 combo.setCurrentText(cur)
+                # 드롭다운은 사용자 덱만, 자동완성 후보에만 카탈로그 추가
+                combo.setCompleter(
+                    make_deck_completer(list(names) + catalog, combo))
         finally:
             self._restoring = False
 
@@ -993,6 +998,8 @@ class RecordView(QWidget):
             self._game_watch_timer.stop()
         if self._poller and self._poller.isRunning():
             self._poller.stop()
+        if getattr(self, "_artfetcher", None) is not None:
+            self._artfetcher.shutdown()
 
     # ── 수동 추가 / 교정 ─────────────────────────────────────────
 
@@ -1147,3 +1154,35 @@ class RecordView(QWidget):
             return
         if name not in set(self.db.decks.list_names()):
             self.db.decks.add(name, is_mine=is_mine)
+        # 덱 입력 시 대표 카드 아트를 백그라운드로 자동 로드
+        self._request_art(name)
+
+    # ── 카드 아트 (지연 초기화) ──────────────────────────────────────
+
+    def _art_service(self):
+        if getattr(self, "_art", None) is None:
+            from ..cardart.service import CardArtService
+            self._art = CardArtService(self.db.decks)
+        return self._art
+
+    def _art_fetcher(self):
+        if getattr(self, "_artfetcher", None) is None:
+            from .art_fetch import ArtFetcher
+            self._artfetcher = ArtFetcher(self._art_service(), self)
+        return self._artfetcher
+
+    def _catalog_names(self) -> list[str]:
+        if getattr(self, "_catalog", None) is None:
+            try:
+                self._catalog = self._art_service().db.all_display_names()
+            except Exception:
+                self._catalog = []
+        return self._catalog
+
+    def _request_art(self, name: str) -> None:
+        if not name or name in (PLACEHOLDER_OPP, WCS_OPP_DECK):
+            return
+        try:
+            self._art_fetcher().request(name)
+        except Exception:
+            pass

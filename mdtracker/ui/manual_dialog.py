@@ -52,6 +52,18 @@ class ManualDialog(QDialog):
             match.opponent_deck if match else (opp_deck or ""))
         self.opp_deck_field.setPlaceholderText("미정")
 
+        # 자동완성 후보 = 사용자 덱 + DB 카드군 카탈로그(드롭다운은 그대로 사용자 덱만)
+        try:
+            from ..cardart.localdb import LocalCardDB
+            from .completer import make_deck_completer
+            _catalog = LocalCardDB().all_display_names()
+            self.my_deck_field.setCompleter(
+                make_deck_completer(list(names) + _catalog, self))
+            self.opp_deck_field.setCompleter(
+                make_deck_completer(list(names) + _catalog, self))
+        except Exception:
+            pass
+
         self.played_at = QDateTimeEdit(QDateTime.currentDateTime())
         self.played_at.setCalendarPopup(True)
         self.played_at.setDisplayFormat("yyyy-MM-dd HH:mm")

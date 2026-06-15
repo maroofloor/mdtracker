@@ -10,7 +10,7 @@ from typing import Union
 
 from .repository import MatchRepository, DeckRepository
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 SCHEMA_SQL = """
 -- 정식 덱(아키타입) 명칭 룩업
@@ -41,6 +41,16 @@ CREATE TABLE IF NOT EXISTS matches (
 
 CREATE INDEX IF NOT EXISTS idx_matches_played_at ON matches(played_at);
 CREATE INDEX IF NOT EXISTS idx_matches_matchup   ON matches(my_deck, opponent_deck);
+
+-- 덱별 대표 카드 아트 매핑 (덱명 문자열 키 — decks 테이블 등록 여부와 무관)
+CREATE TABLE IF NOT EXISTS deck_art (
+    deck_name   TEXT PRIMARY KEY,
+    card_id     INTEGER,                -- YGOPRODeck 카드 id
+    query       TEXT,                   -- 조회에 쓴 영문 아키타입/카드명
+    source      TEXT NOT NULL DEFAULT 'auto',  -- 'auto' | 'manual'
+    image_path  TEXT,                   -- 로컬 캐시 경로(없으면 NULL)
+    updated_at  TEXT
+);
 
 CREATE TABLE IF NOT EXISTS schema_meta (
     key   TEXT PRIMARY KEY,
