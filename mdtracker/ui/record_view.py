@@ -55,7 +55,7 @@ from .ocr_panel import OcrPanel
 PLACEHOLDER_OPP = "미정"
 
 # ── 행 스타일 ─────────────────────────────────────────────────────
-_ROW_H     = 48
+_ROW_H     = 56
 _ROW_EVEN  = QColor(26, 34, 53)
 _ROW_ALT   = QColor(31, 42, 63)
 _ROW_SEL   = QColor(31, 51, 86)
@@ -193,6 +193,13 @@ class MatchTableDelegate(QStyledItemDelegate):
 
     _BADGE_COLS = frozenset({3, 4, 5})
 
+    def __init__(self, parent=None, art_provider=None, pix_cache=None,
+                 banner_cache=None):
+        super().__init__(parent)
+        self._art_provider = art_provider
+        self._pix_cache = pix_cache if pix_cache is not None else {}
+        self._banner_cache = banner_cache if banner_cache is not None else {}
+
     def _row_bg(self, index, selected: bool):
         if selected:
             return _ROW_SEL
@@ -284,9 +291,13 @@ def _attach_autocomplete(combo: QComboBox) -> None:
 
 
 class DeckComboDelegate(QStyledItemDelegate):
-    def __init__(self, names_provider: Callable[[], list[str]], parent=None):
+    def __init__(self, names_provider: Callable[[], list[str]], parent=None,
+                 art_provider=None, pix_cache=None, banner_cache=None):
         super().__init__(parent)
         self._names = names_provider
+        self._art_provider = art_provider
+        self._pix_cache = pix_cache if pix_cache is not None else {}
+        self._banner_cache = banner_cache if banner_cache is not None else {}
 
     def paint(self, painter: QPainter, option, index) -> None:
         from PySide6.QtWidgets import QStyle
@@ -298,11 +309,17 @@ class DeckComboDelegate(QStyledItemDelegate):
             bg = _REVIEW_BG
         else:
             bg = _ROW_ALT if index.row() % 2 else _ROW_EVEN
+        from .row_banner import paint_deck_cols, state_tint
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
         painter.fillRect(option.rect, bg)
+        paint_deck_cols(painter, option, index, self._art_provider,
+                        self.parent(), self._pix_cache, self._banner_cache)
+        state_tint(painter, option.rect, sel, bool(review))
         text = index.data(Qt.ItemDataRole.DisplayRole) or ""
         painter.save()
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
-        painter.setPen(QColor(_C_TEXT))
+        painter.setPen(QColor("#f1f5f9"))
         painter.drawText(
             option.rect.adjusted(8, 0, -8, 0),
             Qt.AlignmentFlag.AlignVCenter,
@@ -578,15 +595,29 @@ class RecordView(QWidget):
         self.table.verticalHeader().hide()
         self.table.setShowGrid(False)
         self.table.setAlternatingRowColors(False)
+        self._art_pix_cache: dict = {}
+        self._art_banner_cache: dict = {}
+
+        def _art_path(n):
+            return self._art_service().local_path(n)
+
         deck_delegate = DeckComboDelegate(
-            lambda: self.db.decks.list_names(), self.table)
+            lambda: self.db.decks.list_names(), self.table,
+            art_provider=_art_path, pix_cache=self._art_pix_cache,
+            banner_cache=self._art_banner_cache)
         self.table.setItemDelegateForColumn(self.MY_DECK_COL, deck_delegate)
         self.table.setItemDelegateForColumn(self.OPP_DECK_COL, deck_delegate)
-        match_delegate = MatchTableDelegate(self.table)
+        match_delegate = MatchTableDelegate(
+            self.table, art_provider=_art_path,
+            pix_cache=self._art_pix_cache, banner_cache=self._art_banner_cache)
         for col in (0, 3, 4, 5, 6):
             self.table.setItemDelegateForColumn(col, match_delegate)
 
         self.ocr_panel = OcrPanel()
+        self.ocr_panel.set_art_support(
+            lambda n: self._art_service().local_path(n),
+            self._request_art,
+            self._catalog_names())
         self.ocr_panel.hide()
 
         # 미확정 행 안내 배너 (미확정 행이 있을 때만 표시)
@@ -624,6 +655,9 @@ class RecordView(QWidget):
         self._reload_table()
         self._update_today_lbl()
         self._update_mini_kpi()
+        # 기록에 등장하는 덱들의 대표 카드 아트를 백그라운드로 확보
+        for nm in self.db.decks.list_names():
+            self._request_art(nm)
 
     def _on_filter_changed(self) -> None:
         """필터 조건 변경 — 테이블·미니 KPI만 다시 그린다 (데이터 불변)."""
@@ -1169,6 +1203,9 @@ class RecordView(QWidget):
         if getattr(self, "_artfetcher", None) is None:
             from .art_fetch import ArtFetcher
             self._artfetcher = ArtFetcher(self._art_service(), self)
+            self._artfetcher.fetched.connect(
+                lambda *_: (self._art_banner_cache.clear(),
+                            self.table.viewport().update()))
         return self._artfetcher
 
     def _catalog_names(self) -> list[str]:

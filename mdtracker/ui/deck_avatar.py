@@ -24,6 +24,55 @@ def _hue_for(name: str) -> int:
     return int(digest[:6], 16) % 360
 
 
+def thumb_pixmap(path: Optional[str], cache: dict) -> Optional[QPixmap]:
+    """경로→QPixmap을 캐시와 함께 반환(없거나 깨지면 None). 델리게이트 재사용용."""
+    if path in cache:
+        return cache[path]
+    pix = None
+    if path:
+        p = QPixmap(path)
+        if not p.isNull():
+            pix = p
+    cache[path] = pix
+    return pix
+
+
+def paint_deck_thumb(painter, x: int, y: int, size: int, name: str,
+                     pixmap: Optional[QPixmap]) -> None:
+    """(x,y,size) 영역에 둥근 덱 썸네일을 그린다 — 이미지 또는 색+이니셜 폴백.
+
+    테이블 델리게이트 등 QPainter 컨텍스트에서 직접 호출한다.
+    """
+    painter.save()
+    rect = QRectF(x, y, size, size)
+    radius = max(3.0, size * 0.22)
+    clip = QPainterPath()
+    clip.addRoundedRect(rect, radius, radius)
+    painter.setClipPath(clip)
+    if pixmap is not None:
+        scaled = pixmap.scaled(
+            size, size, Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+            Qt.TransformationMode.SmoothTransformation)
+        px = x + (size - scaled.width()) // 2
+        py = y + (size - scaled.height()) // 2
+        painter.drawPixmap(px, py, scaled)
+    else:
+        hue = _hue_for(name)
+        g = QLinearGradient(rect.topLeft(), rect.bottomRight())
+        g.setColorAt(0.0, QColor.fromHsl(hue, 130, 92))
+        g.setColorAt(1.0, QColor.fromHsl((hue + 28) % 360, 140, 64))
+        painter.fillRect(rect, g)
+        painter.setClipping(False)
+        initial = name.strip()[:1] if name and name.strip() else "?"
+        f = QFont("Noto Sans KR")
+        f.setBold(True)
+        f.setPixelSize(max(9, int(size * 0.5)))
+        painter.setFont(f)
+        painter.setPen(QColor("#ffffff"))
+        painter.drawText(rect, Qt.AlignmentFlag.AlignCenter, initial)
+    painter.restore()
+
+
 class DeckAvatar(QWidget):
     clicked = Signal()
 
@@ -45,6 +94,10 @@ class DeckAvatar(QWidget):
             pass
 
     def _on_theme_changed(self, _theme_id: str) -> None:
+        self.update()
+
+    def set_name(self, name: str) -> None:
+        self._name = name or ""
         self.update()
 
     def set_image(self, image_path: Optional[str]) -> None:
