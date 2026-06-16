@@ -10,15 +10,14 @@ from PySide6.QtGui import (
     QColor, QLinearGradient, QPainter, QPainterPath, QPixmap,
 )
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout,
-    QHeaderView, QLabel, QPushButton, QScrollArea, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QCheckBox, QComboBox, QFrame, QGridLayout, QHBoxLayout,
+    QLabel, QPushButton, QScrollArea, QVBoxLayout, QWidget,
 )
 
 from .. import stats
 from ..cardart.service import CardArtService
 from ..styles import theme
-from ..styles.theme import BORDER, LOSE, PANEL, TEXT, TEXT2
+from ..styles.theme import LOSE, TEXT, TEXT2
 from .advanced_bar import AdvancedBar
 from .art_fetch import ArtFetcher
 from .deck_avatar import _hue_for
@@ -197,7 +196,7 @@ class MatchupView(QWidget):
         bar.addWidget(self._deck_combo)
         bar.addStretch()
 
-        # 부차 컨트롤은 '고급'으로 접는다(삭제 아님): 정렬·소표본 숨김·전체 히트맵
+        # 부차 컨트롤은 '고급'으로 접는다(삭제 아님): 정렬·소표본 숨김
         self._adv = AdvancedBar()
         self._adv.add_label("정렬")
         self._sort_combo = QComboBox()
@@ -208,11 +207,6 @@ class MatchupView(QWidget):
         self._hide_small = QCheckBox("표본 3건 미만 숨기기")
         self._hide_small.stateChanged.connect(self._render)
         self._adv.add_widget(self._hide_small)
-
-        self._heatmap_toggle = QPushButton("전체 히트맵")
-        self._heatmap_toggle.setCheckable(True)
-        self._heatmap_toggle.toggled.connect(self._on_mode_toggled)
-        self._adv.add_widget(self._heatmap_toggle)
         bar.addWidget(self._adv)
         root.addLayout(bar)
 
@@ -231,31 +225,12 @@ class MatchupView(QWidget):
         self._scroll.setWidget(self._content)
         root.addWidget(self._scroll, 1)
 
-        # ── 전체 히트맵 테이블 ────────────────────────────────────
-        self._heatmap = QTableWidget(0, 0)
-        self._heatmap.setEditTriggers(QAbstractItemView.NoEditTriggers)
-        self._heatmap.verticalHeader().setDefaultSectionSize(40)
-        self._heatmap.setStyleSheet(
-            f"QTableWidget {{ background: {PANEL}; }}"
-            f"QHeaderView::section {{ background: {PANEL}; color: {TEXT2};"
-            f"font-size: 10px; }}")
-        self._heatmap.hide()
-        root.addWidget(self._heatmap, 1)
-
         # ── 빈 상태 안내 ──────────────────────────────────────────
         self._empty_lbl = QLabel()
         self._empty_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._empty_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 13px;")
         self._empty_lbl.hide()
         root.addWidget(self._empty_lbl, 1)
-
-    # ── 모드 전환 ────────────────────────────────────────────────
-    def _on_mode_toggled(self, heatmap: bool) -> None:
-        self._heatmap_toggle.setText("단일 덱 카드" if heatmap else "전체 히트맵")
-        self._deck_combo.setEnabled(not heatmap)
-        self._sort_combo.setEnabled(not heatmap)
-        self._hide_small.setEnabled(not heatmap)
-        self._render()
 
     def _clear_box(self) -> None:
         while self._cvbox.count():
@@ -266,7 +241,6 @@ class MatchupView(QWidget):
     def _show_empty(self, msg: str) -> None:
         self._clear_box()
         self._scroll.hide()
-        self._heatmap.hide()
         self._empty_lbl.setText(msg)
         self._empty_lbl.show()
 
@@ -310,10 +284,7 @@ class MatchupView(QWidget):
 
     # ── 렌더 ─────────────────────────────────────────────────────
     def _render(self, *_) -> None:
-        if self._heatmap_toggle.isChecked():
-            self._render_heatmap()
-        else:
-            self._render_cards()
+        self._render_cards()
 
     def _render_cards(self) -> None:
         my_deck = self._deck_combo.currentText()
@@ -341,7 +312,6 @@ class MatchupView(QWidget):
             key=lambda x: x[1]["win_rate"] or 0.0)
 
         self._empty_lbl.hide()
-        self._heatmap.hide()
         self._scroll.show()
         self._clear_box()
         self._add_grid_section(
@@ -349,40 +319,9 @@ class MatchupView(QWidget):
             caution, LOSE)
         self._add_grid_section("전체 매치업", self._sorted_entries(entries), TEXT)
 
-    def _render_heatmap(self) -> None:
-        mm = stats.matchup_matrix(self._matches())
-        my_decks, opp_decks, cells = mm["my_decks"], mm["opp_decks"], mm["cells"]
-        if not my_decks or not opp_decks:
-            self._show_empty("히트맵을 그릴 매치업 데이터가 없습니다.")
-            return
-        self._empty_lbl.hide()
-        self._scroll.hide()
-        self._heatmap.show()
-        self._heatmap.setRowCount(len(my_decks))
-        self._heatmap.setColumnCount(len(opp_decks))
-        self._heatmap.setHorizontalHeaderLabels(opp_decks)
-        self._heatmap.setVerticalHeaderLabels(my_decks)
-        self._heatmap.horizontalHeader().setSectionResizeMode(
-            QHeaderView.ResizeToContents)
-        for i in range(len(my_decks)):
-            for j in range(len(opp_decks)):
-                cell = cells[i][j]
-                if cell["n"] == 0:
-                    item = QTableWidgetItem("")
-                    item.setBackground(QColor(theme.active().panel))
-                else:
-                    item = QTableWidgetItem(
-                        f"{fmt_pct(cell['win_rate'])}\n{cell['n']}전")
-                    item.setBackground(_heat(cell["win_rate"]))
-                    item.setForeground(QColor("#111111"))
-                    item.setToolTip(_cell_tooltip(opp_decks[j], cell))
-                item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
-                self._heatmap.setItem(i, j, item)
-
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if not self._heatmap_toggle.isChecked():
-            self._render_cards()
+        self._render_cards()
 
     def refresh(self) -> None:
         cur = self._deck_combo.currentText()

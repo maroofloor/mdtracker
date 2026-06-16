@@ -194,11 +194,12 @@ class MatchTableDelegate(QStyledItemDelegate):
     _BADGE_COLS = frozenset({3, 4, 5})
 
     def __init__(self, parent=None, art_provider=None, pix_cache=None,
-                 banner_cache=None):
+                 banner_cache=None, row_anim=None):
         super().__init__(parent)
         self._art_provider = art_provider
         self._pix_cache = pix_cache if pix_cache is not None else {}
         self._banner_cache = banner_cache if banner_cache is not None else {}
+        self._row_anim = row_anim
 
     def _row_bg(self, index, selected: bool):
         if selected:
@@ -214,6 +215,11 @@ class MatchTableDelegate(QStyledItemDelegate):
         sel  = bool(option.state & QStyle.StateFlag.State_Selected)
 
         painter.save()
+        ra = self._row_anim
+        if (ra is not None and ra.get("row") == index.row()
+                and abs(ra.get("t", 0)) > 0.001):
+            painter.setOpacity(min(1.0, max(0.0, 1.0 - ra["t"])))
+            painter.translate(-ra["t"] * 400.0, 0)
         painter.fillRect(option.rect, self._row_bg(index, sel))
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.TextAntialiasing)
@@ -292,12 +298,14 @@ def _attach_autocomplete(combo: QComboBox) -> None:
 
 class DeckComboDelegate(QStyledItemDelegate):
     def __init__(self, names_provider: Callable[[], list[str]], parent=None,
-                 art_provider=None, pix_cache=None, banner_cache=None):
+                 art_provider=None, pix_cache=None, banner_cache=None,
+                 row_anim=None):
         super().__init__(parent)
         self._names = names_provider
         self._art_provider = art_provider
         self._pix_cache = pix_cache if pix_cache is not None else {}
         self._banner_cache = banner_cache if banner_cache is not None else {}
+        self._row_anim = row_anim
 
     def paint(self, painter: QPainter, option, index) -> None:
         from PySide6.QtWidgets import QStyle
@@ -312,6 +320,13 @@ class DeckComboDelegate(QStyledItemDelegate):
         from .row_banner import paint_deck_cols, state_tint
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         painter.setRenderHint(QPainter.RenderHint.SmoothPixmapTransform)
+        _ra = self._row_anim
+        _slide = (_ra is not None and _ra.get("row") == index.row()
+                  and abs(_ra.get("t", 0)) > 0.001)
+        if _slide:
+            painter.save()
+            painter.setOpacity(min(1.0, max(0.0, 1.0 - _ra["t"])))
+            painter.translate(-_ra["t"] * 400.0, 0)
         painter.fillRect(option.rect, bg)
         paint_deck_cols(painter, option, index, self._art_provider,
                         self.parent(), self._pix_cache, self._banner_cache)
@@ -326,6 +341,8 @@ class DeckComboDelegate(QStyledItemDelegate):
             text,
         )
         painter.restore()
+        if _slide:
+            painter.restore()
 
     def createEditor(self, parent, option, index):
         combo = QComboBox(parent)
@@ -597,6 +614,7 @@ class RecordView(QWidget):
         self.table.setAlternatingRowColors(False)
         self._art_pix_cache: dict = {}
         self._art_banner_cache: dict = {}
+        self._row_anim: dict = {"row": -1, "t": 0.0}
 
         def _art_path(n):
             return self._art_service().local_path(n)
@@ -604,12 +622,13 @@ class RecordView(QWidget):
         deck_delegate = DeckComboDelegate(
             lambda: self.db.decks.list_names(), self.table,
             art_provider=_art_path, pix_cache=self._art_pix_cache,
-            banner_cache=self._art_banner_cache)
+            banner_cache=self._art_banner_cache, row_anim=self._row_anim)
         self.table.setItemDelegateForColumn(self.MY_DECK_COL, deck_delegate)
         self.table.setItemDelegateForColumn(self.OPP_DECK_COL, deck_delegate)
         match_delegate = MatchTableDelegate(
             self.table, art_provider=_art_path,
-            pix_cache=self._art_pix_cache, banner_cache=self._art_banner_cache)
+            pix_cache=self._art_pix_cache, banner_cache=self._art_banner_cache,
+            row_anim=self._row_anim)
         for col in (0, 3, 4, 5, 6):
             self.table.setItemDelegateForColumn(col, match_delegate)
 
@@ -995,6 +1014,7 @@ class RecordView(QWidget):
         self.refresh()
         self.data_changed.emit()
         self._show_record_toast(m)
+        self._animate_new_row()
 
         rl = RESULT_LABELS.get(m.result, m.result)
         # 미확정이면 패널 표시 (사용자 교정·확정) — 상대 덱 미입력,
@@ -1070,6 +1090,8 @@ class RecordView(QWidget):
             self._artfetcher.shutdown()
         if getattr(self, "_toast", None) is not None:
             self._toast.shutdown()
+        if getattr(self, "_row_slide", None) is not None:
+            self._row_slide.stop()
 
     # ── 수동 추가 / 교정 ─────────────────────────────────────────
 
@@ -1111,6 +1133,7 @@ class RecordView(QWidget):
         self.refresh()
         self.data_changed.emit()
         self._show_record_toast(m)
+        self._animate_new_row()
 
     def _show_record_toast(self, m) -> None:
         """기록 저장 직후 결과 색 토스트로 피드백."""
@@ -1130,6 +1153,41 @@ class RecordView(QWidget):
         text, color, fg = table.get(
             m.result, ("기록됨", "#eab308", "#422006"))
         self._toast.show_message(text + suffix, color, fg)
+
+    # ── 새 행 슬라이드인 애니메이션 ───────────────────────────────────
+
+    def _animate_new_row(self) -> None:
+        """새 기록(맨 위 행)을 보이게 스크롤 올리고 옆에서 미끄러져 들어오게."""
+        if self.table.rowCount() == 0:
+            return
+        self.table.scrollToTop()
+        self._row_anim["row"] = 0
+        self._row_anim["t"] = 1.0
+        self._ensure_row_slide().start()
+
+    def _ensure_row_slide(self):
+        anim = getattr(self, "_row_slide", None)
+        if anim is None:
+            from PySide6.QtCore import QEasingCurve, QVariantAnimation
+            anim = QVariantAnimation(self)
+            anim.setStartValue(1.0)
+            anim.setEndValue(0.0)
+            anim.setDuration(900)
+            anim.setEasingCurve(QEasingCurve.Type.OutBack)
+            anim.valueChanged.connect(self._on_row_slide_tick)
+            anim.finished.connect(self._on_row_slide_done)
+            self._row_slide = anim
+        anim.stop()
+        return anim
+
+    def _on_row_slide_tick(self, v) -> None:
+        self._row_anim["t"] = float(v)
+        self.table.viewport().update()
+
+    def _on_row_slide_done(self) -> None:
+        self._row_anim["row"] = -1
+        self._row_anim["t"] = 0.0
+        self.table.viewport().update()
 
     # ── 표 인라인 편집 ────────────────────────────────────────────
 
