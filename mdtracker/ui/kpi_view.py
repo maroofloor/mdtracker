@@ -393,16 +393,17 @@ class KpiView(QWidget):
             self.toss_rate_lbl.setStyleSheet(
                 f"color:{TEXT2}; font-size:12px; font-weight:600; padding:2px 0;")
 
+        # 소표본 세부 지표는 기본 접기 — 토스 승리 표본이 충분할 때만 노출
         c = s_all["toss_win_choice"]
-        if c["n"]:
+        show_choice = c["n"] >= 5
+        self.choice_lbl.setVisible(show_choice)
+        self.choice_rate_lbl.setVisible(show_choice)
+        if show_choice:
             self.choice_lbl.setText(
                 f"토스 승리 시 선공 선택: {fmt_pct(c['first'] / c['n'])} "
                 f"({c['first']}/{c['n']})")
-        else:
-            self.choice_lbl.setText("토스 승리 시 선공 선택: —")
-
-        # 토스 승리 시 선택별 듀얼 승률 (표본 3건 미만 경고)
-        self.choice_rate_lbl.setText(self._choice_rate_text(c.get("by_choice")))
+            self.choice_rate_lbl.setText(
+                self._choice_rate_text(c.get("by_choice")))
 
         decks = sorted(s_all["by_my_deck"].items(),
                        key=lambda kv: kv[1]["n"], reverse=True)

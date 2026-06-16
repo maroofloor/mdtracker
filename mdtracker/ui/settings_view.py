@@ -97,7 +97,6 @@ _SCALE_STEP = 10
 
 
 class SettingsView(QWidget):
-    size_changed  = Signal(int, int)  # width, height
     scale_changed = Signal(float)
 
     def __init__(self, parent: QWidget | None = None) -> None:
@@ -117,18 +116,6 @@ class SettingsView(QWidget):
         # ── 테마 ────────────────────────────────────────────────────
         root.addWidget(self._section_label("테마"))
         self._build_theme_section(root)
-
-        # ── 창 크기 프리셋 ──────────────────────────────────────────
-        root.addWidget(self._section_label("창 크기 프리셋"))
-        size_row = QHBoxLayout()
-        size_row.setSpacing(8)
-        for label, w, h in _SIZE_PRESETS:
-            btn = QPushButton(label)
-            btn.setMinimumWidth(110)
-            btn.clicked.connect(lambda _, ww=w, hh=h: self.size_changed.emit(ww, hh))
-            size_row.addWidget(btn)
-        size_row.addStretch()
-        root.addLayout(size_row)
 
         # ── UI 크기 ─────────────────────────────────────────────────
         root.addWidget(self._section_label("UI 크기"))

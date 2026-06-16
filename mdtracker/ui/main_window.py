@@ -96,7 +96,6 @@ class MainWindow(QMainWindow):
 
         self.sidebar.nav_changed.connect(self._on_nav_changed)
         self.record_view.data_changed.connect(self.dashboard_view.refresh)
-        self.settings_view.size_changed.connect(lambda w, h: self.resize(w, h))
         self.settings_view.scale_changed.connect(self._apply_ui_scale)
 
         # 콘텐츠 영역 (사이드바 + 스택)
