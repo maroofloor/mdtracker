@@ -169,16 +169,10 @@ class DeckView(QWidget):
         self.del_btn.setStyleSheet(f"background: #ef4444; {_BTN}")
         self.del_all_btn = QPushButton("전체 삭제")
         self.del_all_btn.setStyleSheet(f"background: {LOSE_DARK}; {_BTN}")
-        self.export_btn = QPushButton("⬇ 엑셀 내보내기")
-        self.export_btn.setStyleSheet(f"background: {WIN_DARK}; {_BTN}")
-        self.import_btn = QPushButton("⬆ 엑셀 가져오기")
-        self.import_btn.setStyleSheet(f"background: {IMPORT_COLOR}; {_BTN}")
         btn_row.addWidget(self.auto_btn)
         btn_row.addWidget(self.del_btn)
         btn_row.addWidget(self.del_all_btn)
         btn_row.addStretch()
-        btn_row.addWidget(self.export_btn)
-        btn_row.addWidget(self.import_btn)
         root.addLayout(btn_row)
 
         self.gallery_btn.toggled.connect(self._on_toggle_gallery)
@@ -187,8 +181,6 @@ class DeckView(QWidget):
         self.name_edit.returnPressed.connect(self._on_add)
         self.del_btn.clicked.connect(self._on_delete)
         self.del_all_btn.clicked.connect(self._on_delete_all)
-        self.export_btn.clicked.connect(self._on_export)
-        self.import_btn.clicked.connect(self._on_import)
         self.table.itemChanged.connect(self._on_item_changed)
 
     def refresh(self) -> None:

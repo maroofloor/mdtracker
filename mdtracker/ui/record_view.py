@@ -572,11 +572,8 @@ class RecordView(QWidget):
         self.delete_btn.setFixedHeight(28)
         self.delete_all_btn = QPushButton("전체 삭제")
         self.delete_all_btn.setFixedHeight(28)
-        self.export_btn = QPushButton("CSV 내보내기")
-        self.export_btn.setFixedHeight(28)
         ab.addWidget(self.delete_btn)
         ab.addWidget(self.delete_all_btn)
-        ab.addWidget(self.export_btn)
         root.addWidget(action_bar)
 
         # ── 필터바 ───────────────────────────────────────────────
@@ -671,7 +668,6 @@ class RecordView(QWidget):
         self.add_btn.clicked.connect(self._on_add_manual)
         self.delete_btn.clicked.connect(self._on_delete)
         self.delete_all_btn.clicked.connect(self._on_delete_all)
-        self.export_btn.clicked.connect(self._on_export_csv)
         self.table.itemSelectionChanged.connect(self._on_select)
         self.table.itemChanged.connect(self._on_cell_edited)
         self.table.cellDoubleClicked.connect(self._on_cell_double_clicked)

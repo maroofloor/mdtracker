@@ -97,6 +97,13 @@ class MainWindow(QMainWindow):
         self.sidebar.nav_changed.connect(self._on_nav_changed)
         self.record_view.data_changed.connect(self.dashboard_view.refresh)
         self.settings_view.scale_changed.connect(self._apply_ui_scale)
+        # 내보내기/가져오기는 설정 '데이터 관리'에서 일괄 처리
+        self.settings_view.export_matches_requested.connect(
+            self.record_view._on_export_csv)
+        self.settings_view.export_decks_requested.connect(
+            self.deck_view._on_export)
+        self.settings_view.import_decks_requested.connect(
+            self.deck_view._on_import)
 
         # 콘텐츠 영역 (사이드바 + 스택)
         content = QWidget()

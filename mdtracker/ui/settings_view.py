@@ -98,6 +98,9 @@ _SCALE_STEP = 10
 
 class SettingsView(QWidget):
     scale_changed = Signal(float)
+    export_matches_requested = Signal()   # 기록 CSV 내보내기
+    export_decks_requested = Signal()      # 덱 엑셀 내보내기
+    import_decks_requested = Signal()      # 덱 가져오기
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -204,8 +207,22 @@ class SettingsView(QWidget):
         ver_row.addWidget(check_btn)
         root.addLayout(ver_row)
 
-        # ── 데이터 관리 (백업 / 복원) ────────────────────────────
+        # ── 데이터 관리 (내보내기 / 가져오기 / 백업·복원) ──────────
         root.addWidget(self._section_label("데이터 관리"))
+
+        io_row = QHBoxLayout()
+        io_row.setSpacing(8)
+        exp_matches_btn = QPushButton("⬇ 기록 CSV 내보내기")
+        exp_matches_btn.clicked.connect(self.export_matches_requested)
+        exp_decks_btn = QPushButton("⬇ 덱 엑셀 내보내기")
+        exp_decks_btn.clicked.connect(self.export_decks_requested)
+        imp_decks_btn = QPushButton("⬆ 덱 가져오기")
+        imp_decks_btn.clicked.connect(self.import_decks_requested)
+        for b in (exp_matches_btn, exp_decks_btn, imp_decks_btn):
+            io_row.addWidget(b)
+        io_row.addStretch()
+        root.addLayout(io_row)
+
         backup_row = QHBoxLayout()
         backup_row.setSpacing(8)
         backup_btn = QPushButton("데이터 백업")
