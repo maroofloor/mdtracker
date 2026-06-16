@@ -17,13 +17,15 @@ from .trend_view import TrendView
 
 
 class DashboardView(QWidget):
-    def __init__(self, db) -> None:
+    def __init__(self, db, session_start: str | None = None) -> None:
         super().__init__()
         self.db = db
+        self.session_start = session_start
 
         self.filter_bar = FilterBar()
 
-        self.kpi      = KpiView(db, matches_provider=self._filtered)
+        self.kpi      = KpiView(db, matches_provider=self._filtered,
+                                session_start=session_start)
         self._matchup = MatchupView(db, matches_provider=self._filtered)
         self._meta    = MetaView(db, matches_provider=self._filtered)
         self._trend   = TrendView(db, matches_provider=self._filtered)

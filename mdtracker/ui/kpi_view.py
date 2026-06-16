@@ -2,19 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 
 from PySide6.QtCore import Qt, QRectF
 from PySide6.QtGui import QColor, QLinearGradient, QPainter
 from PySide6.QtWidgets import (
-    QAbstractItemView,
-    QGridLayout,
+    QButtonGroup,
     QHBoxLayout,
-    QHeaderView,
     QLabel,
+    QPushButton,
     QScrollArea,
-    QTableWidget,
-    QTableWidgetItem,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
@@ -28,10 +26,6 @@ from .art_fetch import ArtFetcher
 from .deck_avatar import DeckAvatar
 from .donut import CoinGauge, DonutGauge
 from .labels import fmt_pct
-
-
-def _line(t: dict) -> str:
-    return f"{fmt_pct(t['win_rate'])}  ({t['wins']}승 {t['losses']}패 · {t['n']}전)"
 
 
 def _streak_text(streak: dict) -> str:
@@ -73,6 +67,33 @@ class WinRateBar(QWidget):
             grad.setColorAt(0.5, QColor("#eab308"))
             grad.setColorAt(1.0, QColor("#22c55e"))
             painter.setBrush(grad)
+            painter.drawRoundedRect(QRectF(0, 0, fill_w, h), h / 2, h / 2)
+
+
+class GoalBar(QWidget):
+    """목표 진행 바 — 단색(미달성)/초록(달성) 채움. ratio 0~1."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._ratio: float = 0.0
+        self._done: bool = False
+        self.setFixedHeight(6)
+
+    def set_progress(self, ratio: float | None, achieved: bool) -> None:
+        self._ratio = max(0.0, min(1.0, ratio or 0.0))
+        self._done = achieved
+        self.update()
+
+    def paintEvent(self, _) -> None:
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        w, h = self.width(), self.height()
+        painter.setBrush(QColor(SURFACE2))
+        painter.setPen(Qt.NoPen)
+        painter.drawRoundedRect(QRectF(0, 0, w, h), h / 2, h / 2)
+        fill_w = w * self._ratio
+        if fill_w > 0:
+            painter.setBrush(QColor(WIN if self._done else ACCENT))
             painter.drawRoundedRect(QRectF(0, 0, fill_w, h), h / 2, h / 2)
 
 
@@ -163,11 +184,17 @@ class KpiCard(QWidget):
 class KpiView(QWidget):
     """대시보드 요약 탭 — KPI 카드 3개 + 선/후공 + 덱별 승률."""
 
-    def __init__(self, db, matches_provider=None) -> None:
+    # 히어로 도넛 범위 토글 — (라벨, 키)
+    _SCOPES = (("세션", "session"), ("오늘", "today"), ("전체", "all"))
+
+    def __init__(self, db, matches_provider=None, session_start: str | None = None) -> None:
         super().__init__()
         self.db = db
         # 대시보드 공통 필터를 거친 list[Match] 공급자 (기본: 전체)
         self._matches = matches_provider or db.matches.all
+        # 세션 시작 타임스탬프 (앱 실행 시각). 없으면 오늘 0시로 폴백.
+        self._session_start = session_start or date.today().isoformat()
+        self._scope = "session"
         self.art = CardArtService(db.decks)
         self._deck_avatars: dict[str, DeckAvatar] = {}
         self._fetcher = ArtFetcher(self.art, self)
@@ -189,10 +216,37 @@ class KpiView(QWidget):
         right = QVBoxLayout()
         right.setSpacing(6)
         right.addStretch(1)
-        hero_title = QLabel("전체 승률")
-        hero_title.setStyleSheet(
+
+        # 범위 토글: 세션 / 오늘 / 전체 (히어로 도넛 기준 전환)
+        toggle_row = QHBoxLayout()
+        toggle_row.setSpacing(0)
+        self._scope_group = QButtonGroup(self)
+        self._scope_group.setExclusive(True)
+        for i, (label, key) in enumerate(self._SCOPES):
+            btn = QPushButton(label)
+            btn.setCheckable(True)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setChecked(key == self._scope)
+            btn.setStyleSheet(
+                "QPushButton{"
+                f"  color:{TEXT2}; background:{SURFACE}; border:1px solid {BORDER};"
+                "   padding:4px 12px; font-size:11px; font-weight:600;}"
+                "QPushButton:checked{"
+                f"  color:{BG}; background:{ACCENT}; border:1px solid {ACCENT};}}")
+            self._scope_group.addButton(btn, i)
+            toggle_row.addWidget(btn)
+        toggle_row.addStretch(1)
+        self._scope_group.idClicked.connect(self._on_scope_changed)
+        right.addLayout(toggle_row)
+
+        self.hero_title = QLabel("이번 세션 승률")
+        self.hero_title.setStyleSheet(
             f"color:{TEXT2}; font-size:12px; font-weight:600; border:none;")
-        right.addWidget(hero_title)
+        right.addWidget(self.hero_title)
+        self.hero_record = QLabel("—")
+        self.hero_record.setStyleSheet(
+            f"color:{TEXT}; font-size:13px; font-weight:600; border:none;")
+        right.addWidget(self.hero_record)
         self.hero_streak = QLabel("—")
         self.hero_streak.setStyleSheet(
             f"color:{TEXT}; font-size:20px; font-weight:700; border:none;")
@@ -211,6 +265,9 @@ class KpiView(QWidget):
         hero.addLayout(right, 1)
         root.addLayout(hero)
 
+        # ── 목표 밴드 (일일 판수 · 일일 승률 · 연승) ───────────────
+        root.addWidget(self._build_goals_band())
+
         # ── KPI 카드 3열 ─────────────────────────────────────────
         card_row = QHBoxLayout()
         card_row.setSpacing(10)
@@ -220,12 +277,6 @@ class KpiView(QWidget):
             card_row.addWidget(card)
             self._cards.append(card)
         root.addLayout(card_row)
-
-        # ── 전체 승률 요약 라인 ──────────────────────────────────
-        self.overall_lbl = QLabel()
-        self.overall_lbl.setStyleSheet(
-            f"color: {TEXT}; font-size: 13px; font-weight: 600; padding: 4px 0;")
-        root.addWidget(self.overall_lbl)
 
         # ── 선/후공 · 코인 행 ─────────────────────────────────────
         coin_row = QHBoxLayout()
@@ -293,6 +344,140 @@ class KpiView(QWidget):
         scroll.setWidget(deck_container)
         root.addWidget(scroll, 1)
 
+    # ── 목표 밴드 빌드 ───────────────────────────────────────────
+
+    _GOAL_SPECS = (
+        ("daily_games",   "일일 판수",  "판"),
+        ("daily_winrate", "일일 승률",  "%"),
+        ("streak",        "연승",       "연승"),
+    )
+
+    def _build_goals_band(self) -> QWidget:
+        band = QWidget()
+        band.setStyleSheet(
+            f"background:{SURFACE}; border:1px solid {BORDER}; border-radius:8px;")
+        v = QVBoxLayout(band)
+        v.setContentsMargins(12, 10, 12, 10)
+        v.setSpacing(8)
+
+        header = QHBoxLayout()
+        title = QLabel("오늘의 목표")
+        title.setStyleSheet(
+            f"color:{TEXT}; font-size:13px; font-weight:700; border:none;")
+        header.addWidget(title)
+        header.addStretch(1)
+        self._goal_edit_btn = QPushButton("설정")
+        self._goal_edit_btn.setCheckable(True)
+        self._goal_edit_btn.setCursor(Qt.PointingHandCursor)
+        self._goal_edit_btn.setStyleSheet(
+            "QPushButton{"
+            f"  color:{TEXT2}; background:{SURFACE2}; border:1px solid {BORDER};"
+            "   border-radius:6px; padding:3px 12px; font-size:11px;}"
+            f"QPushButton:checked{{ color:{BG}; background:{ACCENT};"
+            f"  border:1px solid {ACCENT}; }}")
+        self._goal_edit_btn.toggled.connect(self._on_goal_edit_toggled)
+        header.addWidget(self._goal_edit_btn)
+        v.addLayout(header)
+
+        # 진행 바 3종
+        self._goal_bars: dict[str, GoalBar] = {}
+        self._goal_value_lbls: dict[str, QLabel] = {}
+        for key, label, _unit in self._GOAL_SPECS:
+            row = QHBoxLayout()
+            row.setSpacing(8)
+            name = QLabel(label)
+            name.setFixedWidth(64)
+            name.setStyleSheet(
+                f"color:{TEXT2}; font-size:11px; border:none;")
+            row.addWidget(name)
+            bar = GoalBar()
+            bar.setFixedHeight(8)
+            row.addWidget(bar, 1)
+            val = QLabel("미설정")
+            val.setFixedWidth(120)
+            val.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            val.setStyleSheet(
+                f"color:{TEXT2}; font-size:11px; border:none;")
+            row.addWidget(val)
+            self._goal_bars[key] = bar
+            self._goal_value_lbls[key] = val
+            v.addLayout(row)
+
+        # 편집 패널 (기본 숨김) — 스핀박스 3개
+        self._goal_editor = QWidget()
+        ed = QHBoxLayout(self._goal_editor)
+        ed.setContentsMargins(0, 4, 0, 0)
+        ed.setSpacing(12)
+        self._goal_spins: dict[str, QSpinBox] = {}
+        goals = self._load_goals()
+        for key, label, unit in self._GOAL_SPECS:
+            col = QVBoxLayout()
+            col.setSpacing(2)
+            cap = QLabel(f"{label} ({unit})")
+            cap.setStyleSheet(f"color:{TEXT2}; font-size:10px; border:none;")
+            spin = QSpinBox()
+            spin.setRange(0, 100 if key == "daily_winrate" else 999)
+            spin.setSpecialValueText("끄기")     # 0이면 '끄기'
+            spin.setValue(self._goal_to_spin(key, goals.get(key)))
+            spin.setStyleSheet(
+                f"QSpinBox{{ color:{TEXT}; background:{SURFACE2};"
+                f"  border:1px solid {BORDER}; border-radius:4px; padding:2px 4px;}}")
+            spin.valueChanged.connect(
+                lambda _val, k=key: self._on_goal_spin_changed(k))
+            col.addWidget(cap)
+            col.addWidget(spin)
+            self._goal_spins[key] = spin
+            ed.addLayout(col)
+        ed.addStretch(1)
+        self._goal_editor.setVisible(False)
+        v.addWidget(self._goal_editor)
+        return band
+
+    # ── 목표 영속 (app_settings) ─────────────────────────────────
+
+    def _load_goals(self) -> dict:
+        return {
+            "daily_games":   self.db.get_setting("goal_daily_games", ""),
+            "daily_winrate": self.db.get_setting("goal_daily_winrate", ""),
+            "streak":        self.db.get_setting("goal_streak", ""),
+        }
+
+    @staticmethod
+    def _goal_to_spin(key: str, raw) -> int:
+        """저장값(문자열) → 스핀박스 정수. 승률은 0~1 → 퍼센트."""
+        try:
+            num = float(raw)
+        except (TypeError, ValueError):
+            return 0
+        if num <= 0:
+            return 0
+        return int(round(num * 100)) if key == "daily_winrate" else int(num)
+
+    def _on_goal_edit_toggled(self, checked: bool) -> None:
+        self._goal_editor.setVisible(checked)
+
+    def _on_goal_spin_changed(self, key: str) -> None:
+        val = self._goal_spins[key].value()
+        if key == "daily_winrate":
+            stored = "" if val <= 0 else f"{val / 100.0:.4f}"
+        else:
+            stored = "" if val <= 0 else str(val)
+        self.db.set_setting(f"goal_{key}", stored)
+        self._refresh_goals()
+
+    # ── 범위 토글 ────────────────────────────────────────────────
+
+    def _on_scope_changed(self, idx: int) -> None:
+        self._scope = self._SCOPES[idx][1]
+        self._refresh_hero()
+
+    def _scope_since(self) -> str:
+        if self._scope == "session":
+            return self._session_start
+        if self._scope == "today":
+            return date.today().isoformat()
+        return ""        # 전체
+
     # ── internal helpers ─────────────────────────────────────────
 
     def _period_matches(self) -> tuple[list, list, list, list]:
@@ -336,6 +521,47 @@ class KpiView(QWidget):
                 + "  ·  "
                 + _part("후공 선택", by_choice["second"]))
 
+    def _refresh_hero(self) -> None:
+        """히어로 도넛·전적·스트릭을 현재 범위(세션/오늘/전체)로 갱신."""
+        labels = {"session": "이번 세션", "today": "오늘", "all": "전체"}
+        self.hero_title.setText(f"{labels[self._scope]} 승률")
+        summ = stats.session_summary(self._matches(), since=self._scope_since())
+        self.donut.set_data(
+            summ["win_rate"], summ["wins"], summ["losses"], summ["n"])
+        if summ["n"]:
+            draws = summ["draws"]
+            draw_str = f" 무{draws}" if draws else ""
+            self.hero_record.setText(
+                f"{summ['wins']}승 {summ['losses']}패{draw_str} · {summ['n']}전")
+        else:
+            self.hero_record.setText("기록 없음")
+        self.hero_streak.setText(_streak_text(summ["current_streak"]))
+
+    def _refresh_goals(self) -> None:
+        """오늘의 목표 진행 바·수치 라벨 갱신."""
+        gp = stats.goal_progress(self._matches(), goals=self._load_goals())
+
+        games = gp["daily_games"]
+        self._goal_bars["daily_games"].set_progress(
+            games["ratio"], games["achieved"])
+        self._goal_value_lbls["daily_games"].setText(
+            f"{games['current']} / {games['target']}판" if games["target"]
+            else "미설정")
+
+        wr = gp["daily_winrate"]
+        self._goal_bars["daily_winrate"].set_progress(wr["ratio"], wr["achieved"])
+        if wr["target"]:
+            cur = fmt_pct(wr["current"]) if wr["n"] else "—"
+            self._goal_value_lbls["daily_winrate"].setText(
+                f"{cur} / {fmt_pct(wr['target'])}")
+        else:
+            self._goal_value_lbls["daily_winrate"].setText("미설정")
+
+        st = gp["streak"]
+        self._goal_bars["streak"].set_progress(st["ratio"], st["achieved"])
+        self._goal_value_lbls["streak"].setText(
+            f"{st['current']} / {st['target']}연승" if st["target"] else "미설정")
+
     def refresh(self) -> None:
         all_matches, today, week, month30 = self._period_matches()
         s_all = stats.win_rate_summary([])  # 빈 데이터셋 기본값 (NameError 방어)
@@ -352,13 +578,11 @@ class KpiView(QWidget):
             if card is self._cards[0]:
                 s_all = s
 
-        self.overall_lbl.setText(f"전체  {_line(s_all['overall'])}")
+        # ── 히어로(범위별 도넛·스트릭) + 목표 갱신 ────────────────
+        self._refresh_hero()
+        self._refresh_goals()
 
-        # ── 히어로 갱신 (도넛 + 스트릭 + 코인 게이지) ──────────────
-        ov = s_all["overall"]
-        self.donut.set_data(ov["win_rate"], ov["wins"], ov["losses"], ov["n"])
-        t_all = stats.trend_series(all_matches)
-        self.hero_streak.setText(_streak_text(t_all["current_streak"]))
+        # 코인 게이지는 표본이 귀해 항상 전체 기준으로 둔다
         ctr_h = s_all["coin_toss_rate"]
         self.coin_gauge.set_data(ctr_h["rate"], ctr_h["win"], ctr_h["n"])
         self.hero_coin.setText(

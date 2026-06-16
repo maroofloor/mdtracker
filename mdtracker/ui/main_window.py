@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
@@ -81,8 +82,11 @@ class MainWindow(QMainWindow):
 
         self._current_scale: float = 1.0
 
+        # 세션 = 앱 실행~종료. 시작 시각을 한 번 캡처해 세션 요약 기준으로 쓴다.
+        self.session_start = datetime.now().isoformat(timespec="seconds")
+
         self.record_view    = RecordView(db)
-        self.dashboard_view = DashboardView(db)
+        self.dashboard_view = DashboardView(db, session_start=self.session_start)
         self.deck_view      = DeckView(db)
         self.settings_view  = SettingsView()
 
@@ -104,6 +108,7 @@ class MainWindow(QMainWindow):
             self.deck_view._on_export)
         self.settings_view.import_decks_requested.connect(
             self.deck_view._on_import)
+        self.settings_view.export_pdf_requested.connect(self._on_export_pdf)
 
         # 콘텐츠 영역 (사이드바 + 스택)
         content = QWidget()
@@ -136,6 +141,25 @@ class MainWindow(QMainWindow):
 
         # 앱 시작 3초 후 백그라운드 업데이트 확인 (네트워크 오류 시 조용히 무시)
         QTimer.singleShot(3000, self._bg_update_check)
+
+    # ── PDF 리포트 내보내기 ──────────────────────────────────────────
+    def _on_export_pdf(self) -> None:
+        from PySide6.QtWidgets import QFileDialog, QMessageBox
+        default = f"mdtracker_report_{datetime.now():%Y%m%d}.pdf"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "PDF 리포트 저장", default, "PDF 파일 (*.pdf)")
+        if not path:
+            return
+        try:
+            from ..report import export_report_pdf
+            # 대시보드 요약 탭의 카드 아트 서비스를 재사용(썸네일 임베드)
+            art = getattr(self.dashboard_view.kpi, "art", None)
+            export_report_pdf(self.db, path, art=art)
+        except Exception as exc:  # noqa: BLE001 — 사용자에게 메시지로 보고
+            QMessageBox.warning(self, "내보내기 실패",
+                                f"PDF 생성 중 오류가 발생했습니다:\n{exc}")
+            return
+        QMessageBox.information(self, "내보내기 완료", f"PDF를 저장했습니다:\n{path}")
 
     def _bg_update_check(self) -> None:
         try:

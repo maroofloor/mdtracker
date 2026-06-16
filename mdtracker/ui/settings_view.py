@@ -101,6 +101,7 @@ class SettingsView(QWidget):
     export_matches_requested = Signal()   # 기록 CSV 내보내기
     export_decks_requested = Signal()      # 덱 엑셀 내보내기
     import_decks_requested = Signal()      # 덱 가져오기
+    export_pdf_requested = Signal()        # 전적 PDF 리포트
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -218,7 +219,9 @@ class SettingsView(QWidget):
         exp_decks_btn.clicked.connect(self.export_decks_requested)
         imp_decks_btn = QPushButton("⬆ 덱 가져오기")
         imp_decks_btn.clicked.connect(self.import_decks_requested)
-        for b in (exp_matches_btn, exp_decks_btn, imp_decks_btn):
+        pdf_btn = QPushButton("📄 PDF 리포트")
+        pdf_btn.clicked.connect(self.export_pdf_requested)
+        for b in (exp_matches_btn, exp_decks_btn, imp_decks_btn, pdf_btn):
             io_row.addWidget(b)
         io_row.addStretch()
         root.addLayout(io_row)

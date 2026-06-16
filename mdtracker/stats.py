@@ -201,6 +201,92 @@ def win_rate_summary(matches: Sequence[Match], *,
     }
 
 
+def session_summary(matches: Sequence[Match], *,
+                    since: str,
+                    include_unconfirmed: bool = False) -> dict:
+    """한 구간(세션/오늘 등)의 요약 — played_at >= since 인 판들만 집계.
+
+    since: ISO 문자열 (세션 시작 타임스탬프 또는 'YYYY-MM-DD' 날짜).
+           ISO 문자열 사전식 비교가 시간순과 일치하므로 그대로 쓴다.
+
+    반환(_tally 키 + 스트릭):
+      {wins, losses, draws, win_rate, n,
+       current_streak: {type, count}, best_streak: {win, loss}}
+    빈 구간이면 n=0, win_rate=None, 스트릭 0을 돌려준다(예외 없음).
+    """
+    ms = sorted(
+        (m for m in _select(matches, include_unconfirmed) if m.played_at >= since),
+        key=lambda m: m.played_at,
+    )
+    return {
+        **_tally(ms),
+        "current_streak": _current_streak(ms),
+        "best_streak": _best_streak(ms),
+    }
+
+
+def _goal_num(value, *, as_int: bool) -> Optional[float]:
+    """app_settings 문자열 목표값을 숫자로. 미설정/0/파싱실패는 None(목표 없음)."""
+    if value is None:
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if num <= 0:
+        return None
+    return float(int(num)) if as_int else num
+
+
+def goal_progress(matches: Sequence[Match], *,
+                  goals: dict,
+                  today: Optional[_date] = None,
+                  include_unconfirmed: bool = False) -> dict:
+    """일일 판수·일일 승률·연승 목표의 현재값/목표값/진행률/달성여부.
+
+    goals: {"daily_games": <int>, "daily_winrate": <0~1 float>, "streak": <int>}
+           각 값은 문자열(app_settings)이어도 되고, 미설정/0이면 그 목표는 비활성.
+    today: 기준일 주입용(테스트). 기본 date.today().
+
+    반환:
+      {
+        "daily_games":   {current:int,   target:int|None,   ratio:float|None, achieved:bool},
+        "daily_winrate": {current:float|None, target:float|None, ratio:float|None,
+                          achieved:bool, n:int},
+        "streak":        {current:int,   target:int|None,   ratio:float|None, achieved:bool},
+      }
+    ratio는 0~1로 클램프(달성 시 1.0). target이 None이면 ratio=None(미설정).
+    daily_games는 오늘 친 모든 판(결과 unknown 포함), daily_winrate의 n은 결정 게임 수.
+    연승 current는 현재 연승 중일 때만 양수(연패 중이면 0).
+    """
+    today = today or _date.today()
+    ms = _select(matches, include_unconfirmed)
+    today_str = today.isoformat()
+    todays = [m for m in ms if m.played_at[:10] == today_str]
+    today_tally = _tally(todays)
+    streak = _current_streak(sorted(ms, key=lambda m: m.played_at))
+    cur_win_streak = streak["count"] if streak["type"] == "win" else 0
+
+    def _entry(current, target) -> dict:
+        if target is None:
+            return {"current": current, "target": None,
+                    "ratio": None, "achieved": False}
+        base = current or 0
+        return {"current": current, "target": target,
+                "ratio": min(1.0, base / target) if target else None,
+                "achieved": base >= target}
+
+    games_target = _goal_num(goals.get("daily_games"), as_int=True)
+    wr_target = _goal_num(goals.get("daily_winrate"), as_int=False)
+    streak_target = _goal_num(goals.get("streak"), as_int=True)
+
+    games = _entry(len(todays), int(games_target) if games_target else None)
+    wr = _entry(today_tally["win_rate"], wr_target)
+    wr["n"] = today_tally["n"]
+    streak_e = _entry(cur_win_streak, int(streak_target) if streak_target else None)
+    return {"daily_games": games, "daily_winrate": wr, "streak": streak_e}
+
+
 def _bucket_key(played_at: str, bucket: str) -> str:
     """played_at(ISO)을 집계 버킷 키(ISO 날짜 문자열)로. week는 그 주 월요일."""
     day = played_at[:10]
