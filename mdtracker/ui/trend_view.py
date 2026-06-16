@@ -20,6 +20,7 @@ from PySide6.QtWidgets import (
 from .. import stats
 from ..styles import theme
 from ..styles.theme import BG, BORDER, TEXT2
+from .advanced_bar import AdvancedBar
 from .chart_theme import baseline_pen, series_pens, style_plot
 
 ROLL_WINDOW = 20
@@ -43,15 +44,19 @@ class TrendView(QWidget):
         self.streak_lbl.setStyleSheet("font-weight:bold;")
         bar.addWidget(self.streak_lbl)
         bar.addStretch()
-        bar.addWidget(self._small_lbl("집계"))
+
+        # 부차 컨트롤은 '고급'으로 접는다(삭제 아님): 집계(일/주)·게임 축
+        self._adv = AdvancedBar()
+        self._adv.add_label("집계")
         self._bucket_combo = QComboBox()
         self._bucket_combo.addItems(["일", "주"])
         self._bucket_combo.currentIndexChanged.connect(self.refresh)
-        bar.addWidget(self._bucket_combo)
+        self._adv.add_widget(self._bucket_combo)
         self._axis_toggle = QPushButton("게임 축")
         self._axis_toggle.setCheckable(True)
         self._axis_toggle.toggled.connect(self._on_axis_toggled)
-        bar.addWidget(self._axis_toggle)
+        self._adv.add_widget(self._axis_toggle)
+        bar.addWidget(self._adv)
         layout.addLayout(bar)
 
         # ── 승률 플롯 ─────────────────────────────────────────────
@@ -92,12 +97,6 @@ class TrendView(QWidget):
         self.count_plot.getAxis("bottom").hide()
         self.count_plot.setXLink(self.plot)
         layout.addWidget(self.count_plot)
-
-    @staticmethod
-    def _small_lbl(text: str) -> QLabel:
-        lbl = QLabel(text)
-        lbl.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
-        return lbl
 
     @staticmethod
     def _style_axes(plot) -> None:

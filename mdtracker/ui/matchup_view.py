@@ -19,6 +19,7 @@ from .. import stats
 from ..cardart.service import CardArtService
 from ..styles import theme
 from ..styles.theme import BORDER, LOSE, PANEL, TEXT, TEXT2
+from .advanced_bar import AdvancedBar
 from .art_fetch import ArtFetcher
 from .deck_avatar import _hue_for
 from .labels import fmt_pct
@@ -194,24 +195,25 @@ class MatchupView(QWidget):
         self._deck_combo.setMinimumWidth(160)
         self._deck_combo.currentTextChanged.connect(self._render)
         bar.addWidget(self._deck_combo)
+        bar.addStretch()
 
-        sort_lbl = QLabel("정렬")
-        sort_lbl.setStyleSheet(f"color: {TEXT2}; font-size: 12px;")
-        bar.addWidget(sort_lbl)
+        # 부차 컨트롤은 '고급'으로 접는다(삭제 아님): 정렬·소표본 숨김·전체 히트맵
+        self._adv = AdvancedBar()
+        self._adv.add_label("정렬")
         self._sort_combo = QComboBox()
         self._sort_combo.addItems(["표본순", "승률 낮은순", "승률 높은순"])
         self._sort_combo.currentIndexChanged.connect(self._render)
-        bar.addWidget(self._sort_combo)
+        self._adv.add_widget(self._sort_combo)
 
         self._hide_small = QCheckBox("표본 3건 미만 숨기기")
         self._hide_small.stateChanged.connect(self._render)
-        bar.addWidget(self._hide_small)
+        self._adv.add_widget(self._hide_small)
 
-        bar.addStretch()
         self._heatmap_toggle = QPushButton("전체 히트맵")
         self._heatmap_toggle.setCheckable(True)
         self._heatmap_toggle.toggled.connect(self._on_mode_toggled)
-        bar.addWidget(self._heatmap_toggle)
+        self._adv.add_widget(self._heatmap_toggle)
+        bar.addWidget(self._adv)
         root.addLayout(bar)
 
         # ── 카드 스크롤 영역 ──────────────────────────────────────

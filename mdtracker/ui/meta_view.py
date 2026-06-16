@@ -24,6 +24,7 @@ from ..styles import theme
 from ..styles.theme import (
     ACCENT, BG, BORDER, LOSE, PANEL, TEXT, TEXT2, WIN,
 )
+from .advanced_bar import AdvancedBar
 from .chart_theme import distribution_palette, style_plot
 from .labels import fmt_pct
 
@@ -121,14 +122,19 @@ class MetaView(QWidget):
         title.setStyleSheet(f"color: {TEXT}; font-size: 15px; font-weight: 600;")
         bar.addWidget(title)
         bar.addStretch()
+
+        # 부차 컨트롤은 '고급'으로 접는다(삭제 아님): 정렬·막대/도넛
+        self._adv = AdvancedBar()
+        self._adv.add_label("정렬")
         self._sort_combo = QComboBox()
         self._sort_combo.addItems(["빈도순", "위협 지수순"])
         self._sort_combo.currentIndexChanged.connect(self.refresh)
-        bar.addWidget(self._sort_combo)
+        self._adv.add_widget(self._sort_combo)
         self._chart_toggle = QPushButton("도넛 보기")
         self._chart_toggle.setCheckable(True)
         self._chart_toggle.toggled.connect(self._on_chart_toggled)
-        bar.addWidget(self._chart_toggle)
+        self._adv.add_widget(self._chart_toggle)
+        bar.addWidget(self._adv)
         root.addLayout(bar)
 
         # ── 표본 부족 배너 ────────────────────────────────────────
