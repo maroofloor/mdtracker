@@ -13,18 +13,20 @@ import math
 
 import pyqtgraph as pg
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QColor, QPainter
+from PySide6.QtGui import QColor, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QHBoxLayout, QHeaderView, QLabel,
-    QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
+    QPushButton, QTableWidget, QTableWidgetItem, QToolTip, QVBoxLayout, QWidget,
 )
 
 from .. import stats
+from ..cardart.service import CardArtService
 from ..styles import theme
 from ..styles.theme import (
     ACCENT, BG, BORDER, LOSE, PANEL, TEXT, TEXT2, WIN,
 )
 from .advanced_bar import AdvancedBar
+from .art_fetch import ArtFetcher
 from .chart_theme import distribution_palette, style_plot
 from .labels import fmt_pct
 
@@ -63,43 +65,160 @@ def _with_tiers(dist: list) -> list:
 
 
 class _DonutWidget(QWidget):
-    """점유율 도넛 — QPainter로 직접 그린다(상위 항목 + 기타 묶음)."""
+    """점유율 도넛 — 각 조각을 그 테마(상대 덱) 카드아트로 채운다.
+
+    카드를 도넛 중심에 정렬하면 조각엔 카드 가장자리만 잘려 보인다. 그래서 각
+    카드를 **그 조각의 위치(중앙: 중간 반지름·이등분각)에 놓고, 조각이 차지하는
+    크기에 맞춰 커버 스케일**한다. 큰 조각엔 카드가 크게, 작은 조각엔 작게
+    들어가며 항상 카드 중앙(일러스트)이 보인다. 색 식별용 옅은 틴트와 배경색
+    구분선을 얹고, 아트가 없으면 팔레트 색으로 대체한다. 구멍은 좁게(0.42).
+    """
+
+    _HOLE_RATIO = 0.42
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self._segments: list[tuple] = []   # (label, share, color)
+        # 세그먼트: (label, share, color, QPixmap|None, tooltip)
+        self._segments: list[tuple] = []
+        self._art_path = None              # 덱명 → 로컬 경로 resolver
+        self._geo = None                   # (cx, cy, inner_r, outer_r) 히트테스트용
+        self._arcs: list[tuple] = []       # (a_low, a_high, tooltip) 조각 각도범위
         self.setMinimumSize(220, 220)
+        self.setMouseTracking(True)        # 호버 툴팁용
+
+    def set_art_resolver(self, fn) -> None:
+        """덱명을 받아 로컬 이미지 경로(또는 None)를 돌려주는 함수 등록."""
+        self._art_path = fn
 
     def set_data(self, dist: list) -> None:
         palette = distribution_palette()
         segs = []
         for i, d in enumerate(dist[:len(palette) - 1]):
-            segs.append((d["deck"], d["share"], palette[i % len(palette)]))
-        rest = sum(d["share"] for d in dist[len(palette) - 1:])
+            segs.append((d["deck"], d["share"], palette[i % len(palette)],
+                         self._load_art(d["deck"]), self._tip(d)))
+        rest_items = dist[len(palette) - 1:]
+        rest = sum(d["share"] for d in rest_items)
         if rest > 0:
-            segs.append(("기타", rest, theme.active().border))
+            names = ", ".join(d["deck"] for d in rest_items[:6])
+            more = " …" if len(rest_items) > 6 else ""
+            tip = (f"기타 {len(rest_items)}종 · 점유율 {rest * 100:.1f}%\n"
+                   f"{names}{more}")
+            segs.append(("기타", rest, theme.active().border, None, tip))
         self._segments = segs
         self.update()
+
+    @staticmethod
+    def _tip(d: dict) -> str:
+        games = d.get("wins", 0) + d.get("losses", 0)
+        wr = fmt_pct(d["win_rate"]) if games else "—"
+        return (f"{d['deck']}\n"
+                f"점유율 {d['share'] * 100:.1f}% · {d['count']}전\n"
+                f"내 승률 {wr} ({d.get('wins', 0)}승 {d.get('losses', 0)}패)")
+
+    def _load_art(self, deck: str):
+        if not self._art_path:
+            return None
+        path = self._art_path(deck)
+        if not path:
+            return None
+        pix = QPixmap(path)
+        return pix if not pix.isNull() else None
 
     def paintEvent(self, _) -> None:
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
+        p.setRenderHint(QPainter.SmoothPixmapTransform)
         w, h = self.width(), self.height()
         size = min(w, h) - 20
         if size <= 0 or not self._segments:
             return
         rect = QRectF((w - size) / 2, (h - size) / 2, size, size)
-        start = 90 * 16                       # 12시 방향에서 시작
-        for _label, share, color in self._segments:
-            span = -int(round(share * 360 * 16))
-            p.setBrush(QColor(color))
-            p.setPen(Qt.NoPen)
-            p.drawPie(rect, start, span)
-            start += span
-        # 가운데 구멍
-        hole = size * 0.55
+        cx, cy = rect.center().x(), rect.center().y()
+        outer_r = size / 2.0
+        inner_r = size * self._HOLE_RATIO / 2.0
+        mid_r = (outer_r + inner_r) / 2.0
+        sep = QColor(theme.active().bg)
+        self._geo = (cx, cy, inner_r, outer_r)   # 히트테스트용
+        self._arcs = []
+        start_deg = 90.0                      # 12시 방향에서 시작
+        for _label, share, color, pix, _tip in self._segments:
+            span_deg = -share * 360.0
+            self._arcs.append((start_deg + span_deg, start_deg, _tip))
+            wedge = QPainterPath()
+            wedge.moveTo(cx, cy)
+            wedge.arcTo(rect, start_deg, span_deg)
+            wedge.closeSubpath()
+
+            p.save()
+            p.setClipPath(wedge)
+            if pix is not None:
+                # 조각 중앙(중간 반지름·이등분각)에 배치, 조각 크기에 맞춰 커버
+                mid_deg = start_deg + span_deg / 2.0
+                brad = math.radians(mid_deg)
+                tx = cx + mid_r * math.cos(brad)
+                ty = cy - mid_r * math.sin(brad)
+                half = abs(math.radians(span_deg)) / 2.0
+                ch, sh = math.cos(half), math.sin(half)
+                # 중앙에서 조각 네 모서리까지 최대 거리 → 그 지름으로 커버
+                cover = max(math.hypot(outer_r * ch - mid_r, outer_r * sh),
+                            math.hypot(inner_r * ch - mid_r, inner_r * sh))
+                s = max(1.0, cover * 2.0 * 1.04)
+                scaled = pix.scaled(
+                    int(s), int(s),
+                    Qt.AspectRatioMode.KeepAspectRatioByExpanding,
+                    Qt.TransformationMode.SmoothTransformation)
+                p.drawPixmap(int(tx - scaled.width() / 2.0),
+                             int(ty - scaled.height() / 2.0), scaled)
+                tint = QColor(color)
+                tint.setAlpha(28)             # 색 식별용 아주 옅은 틴트
+                p.fillPath(wedge, tint)
+            else:
+                p.fillPath(wedge, QColor(color))
+            p.restore()
+
+            p.setPen(QPen(sep, 2))            # 조각 구분선
+            p.setBrush(Qt.NoBrush)
+            p.drawPath(wedge)
+            start_deg += span_deg
+
+        # 가운데 구멍 (좁게)
+        hole = size * self._HOLE_RATIO
+        p.setPen(Qt.NoPen)
         p.setBrush(QColor(theme.active().bg))
-        p.drawEllipse(QRectF((w - hole) / 2, (h - hole) / 2, hole, hole))
+        p.drawEllipse(QRectF(cx - hole / 2, cy - hole / 2, hole, hole))
+
+    # ── 호버 툴팁 ────────────────────────────────────────────────
+    def _seg_at(self, pos) -> str | None:
+        """커서 위치(QPointF)가 올라간 조각의 툴팁(없으면 None)."""
+        if not self._geo or not self._arcs:
+            return None
+        cx, cy, inner_r, outer_r = self._geo
+        dx = pos.x() - cx
+        dy = cy - pos.y()                 # 화면 y는 아래로 증가 → 위로 보정
+        r = math.hypot(dx, dy)
+        if r < inner_r or r > outer_r:    # 구멍/바깥은 제외
+            return None
+        ang = math.degrees(math.atan2(dy, dx))
+        for a_low, a_high, tip in self._arcs:
+            for k in (-360.0, 0.0, 360.0):
+                if a_low <= ang + k <= a_high:
+                    return tip
+        return None
+
+    def mouseMoveEvent(self, e) -> None:
+        pos = e.position() if hasattr(e, "position") else e.pos()
+        tip = self._seg_at(pos)
+        if tip:
+            gp = (e.globalPosition().toPoint() if hasattr(e, "globalPosition")
+                  else e.globalPos())
+            QToolTip.showText(gp, tip, self)
+        else:
+            QToolTip.hideText()
+        super().mouseMoveEvent(e)
+
+    def leaveEvent(self, e) -> None:
+        QToolTip.hideText()
+        super().leaveEvent(e)
 
 
 class MetaView(QWidget):
@@ -107,6 +226,9 @@ class MetaView(QWidget):
         super().__init__()
         self.db = db
         self._matches = matches_provider or db.matches.all
+        self.art = CardArtService(db.decks)
+        self._fetcher = ArtFetcher(self.art, self)
+        self._fetcher.fetched.connect(lambda *_: self.refresh())
         theme.theme_notifier.changed.connect(lambda *_: self.refresh())
         self._build()
         self.refresh()
@@ -161,11 +283,15 @@ class MetaView(QWidget):
         style_plot(self.plot)
         body.addWidget(self.plot, 1)
 
-        # 도넛
+        # 도넛 (기본 보기) — 각 조각을 상대 덱 카드아트로 채운다
         self.donut = _DonutWidget()
+        self.donut.set_art_resolver(self.art.local_path)
         self.donut.hide()
         body.addWidget(self.donut, 1)
         root.addLayout(body, 1)
+
+        # 도넛을 기본 보기로 — 막대 차트는 '고급'에서 전환
+        self._chart_toggle.setChecked(True)
 
     def _on_chart_toggled(self, donut: bool) -> None:
         self._chart_toggle.setText("막대 보기" if donut else "도넛 보기")
@@ -218,6 +344,8 @@ class MetaView(QWidget):
 
         # ── 차트 ──────────────────────────────────────────────────
         if self._chart_toggle.isChecked():
+            for d in dist[:12]:               # 표시될 상위 덱 아트 선요청
+                self._fetcher.request(d["deck"])
             self.donut.set_data(dist)
             return
 
