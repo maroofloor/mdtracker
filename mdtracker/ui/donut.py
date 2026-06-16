@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from typing import Optional
 
-from PySide6.QtCore import QRectF, Qt
+from PySide6.QtCore import (
+    Property, QEasingCurve, QPropertyAnimation, QRectF, Qt,
+)
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
@@ -33,16 +35,34 @@ class DonutGauge(QWidget):
         self._wins = 0
         self._losses = 0
         self._n = 0
+        self._anim_rate = 0.0
+        self._anim = QPropertyAnimation(self, b"animRate", self)
+        self._anim.setDuration(650)
+        self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
         self.setMinimumSize(size, size)
         try:
             theme.theme_notifier.changed.connect(lambda *_: self.update())
         except Exception:
             pass
 
+    def get_anim_rate(self) -> float:
+        return self._anim_rate
+
+    def set_anim_rate(self, v: float) -> None:
+        self._anim_rate = v
+        self.update()
+
+    animRate = Property(float, get_anim_rate, set_anim_rate)
+
     def set_data(self, rate: Optional[float], wins: int, losses: int,
                  n: int) -> None:
         self._rate = rate
         self._wins, self._losses, self._n = wins, losses, n
+        target = rate or 0.0
+        self._anim.stop()
+        self._anim.setStartValue(self._anim_rate)
+        self._anim.setEndValue(target)
+        self._anim.start()
         self.update()
 
     def paintEvent(self, _event) -> None:
@@ -70,16 +90,17 @@ class DonutGauge(QWidget):
         p.setPen(track)
         p.drawArc(rect, 0, 360 * 16)
 
-        # 값 아크 (12시 방향에서 시계방향)
-        if rate:
+        # 값 아크 (12시 방향에서 시계방향, 애니메이션 값으로 채움)
+        arc_rate = self._anim_rate
+        if rate is not None and arc_rate > 0:
             pen = QPen(value_color, thick)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
             p.setPen(pen)
-            span = int(-rate * 360 * 16)
+            span = int(-arc_rate * 360 * 16)
             p.drawArc(rect, 90 * 16, span)
 
-        # 중앙 텍스트
-        pct = "—" if rate is None else f"{round(rate * 100)}%"
+        # 중앙 텍스트 (숫자 카운트업)
+        pct = "—" if rate is None else f"{round(self._anim_rate * 100)}%"
         if rate is None:
             pct_color = t.text2
         else:

@@ -5,10 +5,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Protocol, runtime_checkable
 
-from PySide6.QtCore import QRectF, QSize, QSettings, Qt, QTimer
+from PySide6.QtCore import (
+    QEasingCurve, QPropertyAnimation, QRectF, QSize, QSettings, Qt, QTimer,
+)
 from PySide6.QtGui import QFont, QIcon, QPainterPath, QRegion
 from PySide6.QtWidgets import (
     QApplication,
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QMainWindow,
     QSizeGrip,
@@ -152,8 +155,25 @@ class MainWindow(QMainWindow):
                 pass
         self.stack.setCurrentIndex(index)
         widget = self.stack.currentWidget()
+        self._fade_in(widget)
         if isinstance(widget, _Refreshable):
             widget.refresh()
+
+    def _fade_in(self, widget) -> None:
+        """탭 전환 시 가벼운 페이드 인 (완료 후 효과 제거)."""
+        try:
+            eff = QGraphicsOpacityEffect(widget)
+            widget.setGraphicsEffect(eff)
+            anim = QPropertyAnimation(eff, b"opacity", self)
+            anim.setDuration(200)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+            anim.finished.connect(lambda: widget.setGraphicsEffect(None))
+            anim.start()
+            self._nav_anim = anim
+        except Exception:
+            pass
 
     # ── 라운드 모서리 + 리사이즈 ────────────────────────────────────
 

@@ -644,6 +644,9 @@ class RecordView(QWidget):
         self._undo_toast = _UndoToast(self)
         self._undo_toast.hide()
 
+        from .toast import Toast
+        self._toast = Toast(self)
+
         # ── 시그널 연결 ───────────────────────────────────────────
         self.ocr_btn.toggled.connect(self._on_ocr_toggle)
         self.add_btn.clicked.connect(self._on_add_manual)
@@ -991,6 +994,7 @@ class RecordView(QWidget):
         self._reset_session_opp()
         self.refresh()
         self.data_changed.emit()
+        self._show_record_toast(m)
 
         rl = RESULT_LABELS.get(m.result, m.result)
         # 미확정이면 패널 표시 (사용자 교정·확정) — 상대 덱 미입력,
@@ -1064,6 +1068,8 @@ class RecordView(QWidget):
             self._poller.stop()
         if getattr(self, "_artfetcher", None) is not None:
             self._artfetcher.shutdown()
+        if getattr(self, "_toast", None) is not None:
+            self._toast.shutdown()
 
     # ── 수동 추가 / 교정 ─────────────────────────────────────────
 
@@ -1104,6 +1110,26 @@ class RecordView(QWidget):
         self._reset_session_opp()
         self.refresh()
         self.data_changed.emit()
+        self._show_record_toast(m)
+
+    def _show_record_toast(self, m) -> None:
+        """기록 저장 직후 결과 색 토스트로 피드백."""
+        opp = (m.opponent_deck
+               if m.opponent_deck not in (PLACEHOLDER_OPP, WCS_OPP_DECK)
+               else "")
+        suffix = f"  ·  {opp}" if opp else ""
+        if not getattr(m, "confirmed", True):
+            self._toast.show_message(
+                "기록됨 · 확인이 필요해요" + suffix, "#eab308", "#422006")
+            return
+        table = {
+            "win":  ("✓ 승리 기록됨", "#22c55e", "#052e16"),
+            "loss": ("✗ 패배 기록됨", "#ef4444", "#fff1f2"),
+            "draw": ("무승부 기록됨", "#6b7280", "#f9fafb"),
+        }
+        text, color, fg = table.get(
+            m.result, ("기록됨", "#eab308", "#422006"))
+        self._toast.show_message(text + suffix, color, fg)
 
     # ── 표 인라인 편집 ────────────────────────────────────────────
 
