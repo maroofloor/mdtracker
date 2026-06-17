@@ -26,16 +26,22 @@ const shots = [
     src: "/screenshots/record.png",
     title: "기록 탭",
     body: "자동 인식된 결과를 확인·교정하고, 수동으로도 추가합니다.",
+    w: 900,
+    h: 600,
   },
   {
     src: "/screenshots/dashboard.png",
     title: "대시보드 탭",
     body: "요약 KPI · 매치업 · 메타 분포 · 기간별 추세를 한 화면에.",
+    w: 1221,
+    h: 872,
   },
   {
     src: "/screenshots/deck.png",
     title: "덱 관리 탭",
     body: "내 덱을 관리하고 퍼지 검색으로 OCR 오인식을 바로잡습니다.",
+    w: 900,
+    h: 600,
   },
 ];
 
@@ -91,8 +97,8 @@ export default function HowItWorks() {
                 <img
                   src={sh.src}
                   alt={sh.title}
-                  width={1000}
-                  height={680}
+                  width={sh.w}
+                  height={sh.h}
                   className="block h-auto w-full border border-white/5"
                 />
               </div>

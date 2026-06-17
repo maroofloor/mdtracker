@@ -67,8 +67,8 @@ export default function Hero() {
                 <img
                   src="/screenshots/app-hero.png"
                   alt="MDTracker 메인 화면"
-                  width={1280}
-                  height={820}
+                  width={900}
+                  height={600}
                   className="block h-auto w-full"
                 />
               </div>
