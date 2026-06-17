@@ -324,14 +324,31 @@ class MatchupView(QWidget):
         self._render_cards()
 
     def refresh(self) -> None:
-        cur = self._deck_combo.currentText()
+        # 데이터/필터 변경 시에는 현재 선택을 유지한다.
+        self._populate_decks(prefer=self._deck_combo.currentText())
+
+    def _populate_decks(self, prefer: str) -> None:
+        """내 덱 콤보를 다시 채우고 prefer를 선택(없으면 첫 항목)한 뒤 렌더."""
         self._deck_combo.blockSignals(True)
         self._deck_combo.clear()
         mine = self.db.decks.list_mine_names() if self.db else []
         if not mine:
             mine = stats.matchup_matrix(self._matches())["my_decks"]
         self._deck_combo.addItems(mine)
-        idx = self._deck_combo.findText(cur)
+        idx = self._deck_combo.findText(prefer) if prefer else -1
         self._deck_combo.setCurrentIndex(max(idx, 0))
         self._deck_combo.blockSignals(False)
         self._render()
+
+    def _latest_my_deck(self) -> str | None:
+        """현재 데이터에서 가장 최근(played_at 최대)에 진행한 판의 내 덱."""
+        matches = self._matches()
+        if not matches:
+            return None
+        return max(matches, key=lambda m: m.played_at).my_deck
+
+    def showEvent(self, event) -> None:
+        # 매치업 탭에 들어올 때마다 가장 최근 판의 내 덱을 기본 표시한다.
+        super().showEvent(event)
+        latest = self._latest_my_deck()
+        self._populate_decks(prefer=latest or self._deck_combo.currentText())
