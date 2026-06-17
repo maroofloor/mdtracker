@@ -17,12 +17,13 @@ from PySide6.QtWidgets import (
     QLayout,
     QPushButton,
     QSizePolicy,
+    QVBoxLayout,
     QWidget,
 )
 
 from .. import stats
 from ..models import Match
-from ..styles.theme import BORDER, PANEL, TEXT2
+from ..styles.theme import ACCENT, BORDER, PANEL, TEXT, TEXT2
 from .labels import COIN_LABELS, COIN_TOSS_LABELS, EVENT_LABELS, RESULT_LABELS
 
 # (표시 라벨, period 값) — stats.FILTER_PERIODS와 대응
@@ -125,14 +126,47 @@ class FilterBar(QWidget):
         self.setStyleSheet(
             f"FilterBar {{ background-color: {PANEL};"
             f"border-bottom: 1px solid {BORDER}; }}")
-        # 폭이 좁아지면 필터 칩이 잘리지 않고 다음 줄로 접히도록 FlowLayout 사용.
-        # 부모 레이아웃이 줄바꿈된 높이를 반영하도록 heightForWidth를 켠다.
         sp = QSizePolicy(QSizePolicy.Policy.Preferred,
                          QSizePolicy.Policy.Minimum)
         sp.setHeightForWidth(True)
         self.setSizePolicy(sp)
 
-        layout = FlowLayout(self, margin=6, hspacing=8, vspacing=4)
+        # FilterBar = 헤더(접기 토글) + 본문(필터 칩). 본문은 접을 수 있다.
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        outer.setSpacing(0)
+
+        # ── 헤더: 접기/펼치기 토글 + (접힘 시) 적용 중 표시 ──
+        header = QWidget()
+        header.setStyleSheet("background: transparent;")
+        hb = QHBoxLayout(header)
+        hb.setContentsMargins(8, 3, 8, 3)
+        hb.setSpacing(8)
+        self.toggle_btn = QPushButton("▸  필터")
+        self.toggle_btn.setCheckable(True)
+        self.toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.toggle_btn.setStyleSheet(
+            f"QPushButton{{ color:{TEXT2}; background:transparent; border:none;"
+            " font-size:12px; font-weight:600; padding:2px 4px; text-align:left;}"
+            f"QPushButton:hover{{ color:{TEXT}; }}")
+        self.toggle_btn.toggled.connect(self._on_toggle)
+        hb.addWidget(self.toggle_btn)
+        self._active_lbl = QLabel("")
+        self._active_lbl.setStyleSheet(
+            f"color:{ACCENT}; font-size:11px; background:transparent; border:none;")
+        hb.addWidget(self._active_lbl)
+        hb.addStretch(1)
+        outer.addWidget(header)
+
+        # ── 본문: 필터 칩 (좁으면 줄바꿈되는 FlowLayout) ──
+        self._body = QWidget()
+        self._body.setStyleSheet("background: transparent;")
+        bsp = QSizePolicy(QSizePolicy.Policy.Preferred,
+                          QSizePolicy.Policy.Minimum)
+        bsp.setHeightForWidth(True)
+        self._body.setSizePolicy(bsp)
+        layout = FlowLayout(self._body, margin=6, hspacing=8, vspacing=4)
+        outer.addWidget(self._body)
 
         self._combos: list[QComboBox] = []
         self.period = self._add_combo(
@@ -157,6 +191,24 @@ class FilterBar(QWidget):
         self.reset_btn.setFixedHeight(24)
         self.reset_btn.clicked.connect(self.reset)
         layout.addWidget(self.reset_btn)
+
+        # 기본은 접힌 상태로 시작한다.
+        self._body.setVisible(False)
+        self._update_active_indicator()
+
+    # ── 접기/펼치기 ──────────────────────────────────────────────
+
+    def _on_toggle(self, checked: bool) -> None:
+        self._body.setVisible(checked)
+        self.toggle_btn.setText(("▾" if checked else "▸") + "  필터")
+        self._update_active_indicator()
+
+    def _update_active_indicator(self) -> None:
+        """접혀 있을 때 필터가 적용 중이면 헤더에 표시(놓치지 않도록)."""
+        if not self._body.isVisible() and self.is_active():
+            self._active_lbl.setText("● 적용 중")
+        else:
+            self._active_lbl.setText("")
 
     # ── 구성 헬퍼 ────────────────────────────────────────────────
 
@@ -190,6 +242,7 @@ class FilterBar(QWidget):
         return combo
 
     def _emit_changed(self, *_) -> None:
+        self._update_active_indicator()
         self.changed.emit()
 
     # ── 공개 API ─────────────────────────────────────────────────
@@ -245,6 +298,7 @@ class FilterBar(QWidget):
             combo.blockSignals(True)
             combo.setCurrentIndex(0)
             combo.blockSignals(False)
+        self._update_active_indicator()
         self.changed.emit()
 
     def get_state(self) -> dict:
@@ -281,4 +335,5 @@ class FilterBar(QWidget):
         _set_index(self.coin, "coin")
         _set_index(self.toss, "toss")
         _set_data(self.season, "season")
+        self._update_active_indicator()
         self.changed.emit()
