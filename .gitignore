@@ -53,3 +53,9 @@ desktop.ini
 
 # 로그
 *.log
+
+# 웹 (랜딩페이지) — 소스는 추적, 빌드 산출물만 제외
+node_modules/
+.next/
+out/
+.vercel/
