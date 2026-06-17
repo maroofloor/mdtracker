@@ -119,10 +119,11 @@ jobs:
           $ver    = "${{ steps.version.outputs.VERSION }}"
           $numver = "${{ steps.version.outputs.NUMVER }}"
 
-          # AppVersion = 전체 버전(파일명·표시용), VersionInfoVersion = 숫자만(Inno 요구)
+          # AppVersion = 전체 버전(파일명·표시용), VersionInfo* = 숫자만(Inno 요구)
           (Get-Content installer\MDTracker_Setup.iss) `
             -replace '#define AppVersion\s+"[^"]*"', "#define AppVersion   `"$ver`"" `
-            -replace 'VersionInfoVersion=[^\r\n]*', "VersionInfoVersion=$numver" |
+            -replace 'VersionInfoVersion=[^\r\n]*', "VersionInfoVersion=$numver" `
+            -replace 'VersionInfoProductVersion=[^\r\n]*', "VersionInfoProductVersion=$numver" |
             Set-Content installer\MDTracker_Setup.iss
 
           & $iscc installer\MDTracker_Setup.iss
