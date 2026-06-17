@@ -11,7 +11,7 @@ build/
 # PyInstaller 빌드 아티팩트
 *.spec.bak
 tesseract/              # Tesseract 번들 바이너리 (CI가 다운로드)
-installer/Output/       # 생성된 인스톨러 .exe
+installer/Output        # 생성된 인스톨러 (파일/폴더 모두 무시)
 .venv/
 venv/
 env/
