@@ -74,6 +74,8 @@ def main() -> None:
 
     win = MainWindow(db)
     win.show()
+    win.raise_()
+    win.activateWindow()
 
     # 자동 업데이트 확인 (PyInstaller 빌드에서만 동작, 개발 환경에서는 무시)
     if "--no-update" not in sys.argv:

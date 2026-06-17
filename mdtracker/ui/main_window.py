@@ -9,7 +9,9 @@ from typing import Protocol, runtime_checkable
 from PySide6.QtCore import (
     QEasingCurve, QPropertyAnimation, QRectF, QSize, QSettings, Qt, QTimer,
 )
-from PySide6.QtGui import QFont, QIcon, QPainterPath, QRegion
+from PySide6.QtGui import (
+    QCursor, QFont, QGuiApplication, QIcon, QPainterPath, QRegion,
+)
 from PySide6.QtWidgets import (
     QApplication,
     QGraphicsOpacityEffect,
@@ -244,6 +246,24 @@ class MainWindow(QMainWindow):
         h = _setting_int(s, "window_height", 800)
         self.resize(w, h)
         self._apply_ui_scale(scale)
+        # 프레임리스 창은 위치를 저장/복원하지 않으므로, 멀티모니터·DPI 환경에서
+        # 화면 밖에 떠 안 보이는 일이 없도록 항상 활성 화면 중앙에 배치한다.
+        self._place_on_screen()
+
+    def _place_on_screen(self) -> None:
+        """커서가 있는 화면(없으면 주 화면)의 가용 영역 안에 창을 중앙 배치한다.
+
+        창이 화면보다 크면 화면 크기로 줄여 항상 화면 안에 보이도록 보장한다.
+        """
+        screen = (QGuiApplication.screenAt(QCursor.pos())
+                  or QGuiApplication.primaryScreen())
+        if screen is None:
+            return
+        a = screen.availableGeometry()
+        w = min(self.width(), a.width())
+        h = min(self.height(), a.height())
+        self.resize(w, h)
+        self.move(a.center().x() - w // 2, a.center().y() - h // 2)
 
     def _save_settings(self) -> None:
         s = QSettings("MDTracker", "MDTracker")
