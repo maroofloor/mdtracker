@@ -1,4 +1,4 @@
-import { site } from "@/lib/site";
+import DownloadButton from "./DownloadButton";
 
 const stats = [
   { value: "자동", label: "OCR 인식" },
@@ -33,14 +33,9 @@ export default function Hero() {
           </p>
 
           <div className="mt-9 flex flex-wrap items-center gap-3">
-            <a
-              href={site.releasesLatest}
-              target="_blank"
-              rel="noreferrer"
-              className="clip-slash bg-teal px-7 py-3.5 font-display text-base font-bold tracking-wide text-teal-ink transition-transform hover:scale-[1.03] active:scale-95"
-            >
+            <DownloadButton className="clip-slash bg-teal px-7 py-3.5 font-display text-base font-bold tracking-wide text-teal-ink transition-transform hover:scale-[1.03] active:scale-95">
               지금 다운로드
-            </a>
+            </DownloadButton>
             <a
               href="#how"
               className="border border-white/15 px-7 py-3.5 font-display text-base font-bold tracking-wide text-white/90 transition-colors hover:border-teal/60 hover:text-teal"

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { site } from "@/lib/site";
+import DownloadButton from "./DownloadButton";
 
 const links = [
   { href: "#features", label: "기능" },
@@ -49,14 +50,9 @@ export default function Nav() {
           ))}
         </div>
 
-        <a
-          href={site.releasesLatest}
-          target="_blank"
-          rel="noreferrer"
-          className="clip-slash-sm bg-teal px-4 py-2 font-display text-sm font-bold text-teal-ink transition-transform hover:scale-[1.03] active:scale-95"
-        >
+        <DownloadButton className="clip-slash-sm bg-teal px-4 py-2 font-display text-sm font-bold text-teal-ink transition-transform hover:scale-[1.03] active:scale-95">
           다운로드
-        </a>
+        </DownloadButton>
       </nav>
     </header>
   );

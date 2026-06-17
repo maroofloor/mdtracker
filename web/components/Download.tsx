@@ -1,4 +1,5 @@
 import { site } from "@/lib/site";
+import DownloadButton from "./DownloadButton";
 
 const points = [
   "Python · Tesseract 설치 불필요 — 설치 파일에 모두 포함",
@@ -47,14 +48,9 @@ export default function Download() {
           </div>
 
           <div className="flex flex-col gap-3">
-            <a
-              href={site.releasesLatest}
-              target="_blank"
-              rel="noreferrer"
-              className="clip-slash bg-teal px-7 py-4 text-center font-display text-lg font-bold tracking-wide text-teal-ink transition-transform hover:scale-[1.02] active:scale-95"
-            >
+            <DownloadButton className="clip-slash bg-teal px-7 py-4 text-center font-display text-lg font-bold tracking-wide text-teal-ink transition-transform hover:scale-[1.02] active:scale-95">
               Windows용 다운로드
-            </a>
+            </DownloadButton>
             <a
               href={site.github}
               target="_blank"
