@@ -9,12 +9,14 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QPoint, QRect, QSize, Qt, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QHBoxLayout,
     QLabel,
+    QLayout,
     QPushButton,
+    QSizePolicy,
     QWidget,
 )
 
@@ -35,6 +37,83 @@ _PERIOD_ITEMS = [
 _ALL_LABEL = "전체"
 
 
+class FlowLayout(QLayout):
+    """가로로 채우다 폭이 부족하면 다음 줄로 접는 레이아웃.
+
+    좁은 창에서 필터 칩이 잘리지 않고 여러 줄로 자동 줄바꿈된다.
+    (Qt 공식 FlowLayout 예제를 PySide6용으로 단순화.)
+    """
+
+    def __init__(self, parent=None, margin: int = 0,
+                 hspacing: int = 6, vspacing: int = 4) -> None:
+        super().__init__(parent)
+        self._items: list = []
+        self._hspace = hspacing
+        self._vspace = vspacing
+        self.setContentsMargins(margin, margin, margin, margin)
+
+    def addItem(self, item) -> None:        # noqa: N802 (Qt 시그니처)
+        self._items.append(item)
+
+    def count(self) -> int:
+        return len(self._items)
+
+    def itemAt(self, index: int):           # noqa: N802
+        if 0 <= index < len(self._items):
+            return self._items[index]
+        return None
+
+    def takeAt(self, index: int):           # noqa: N802
+        if 0 <= index < len(self._items):
+            return self._items.pop(index)
+        return None
+
+    def expandingDirections(self):          # noqa: N802
+        return Qt.Orientation(0)
+
+    def hasHeightForWidth(self) -> bool:    # noqa: N802
+        return True
+
+    def heightForWidth(self, width: int) -> int:    # noqa: N802
+        return self._do_layout(QRect(0, 0, width, 0), test_only=True)
+
+    def setGeometry(self, rect: QRect) -> None:     # noqa: N802
+        super().setGeometry(rect)
+        self._do_layout(rect, test_only=False)
+
+    def sizeHint(self) -> QSize:            # noqa: N802
+        return self.minimumSize()
+
+    def minimumSize(self) -> QSize:         # noqa: N802
+        size = QSize()
+        for item in self._items:
+            size = size.expandedTo(item.minimumSize())
+        m = self.contentsMargins()
+        size += QSize(m.left() + m.right(), m.top() + m.bottom())
+        return size
+
+    def _do_layout(self, rect: QRect, test_only: bool) -> int:
+        m = self.contentsMargins()
+        x = rect.x() + m.left()
+        y = rect.y() + m.top()
+        right = rect.right() - m.right()
+        line_height = 0
+        for item in self._items:
+            w = item.sizeHint().width()
+            h = item.sizeHint().height()
+            next_x = x + w + self._hspace
+            if next_x - self._hspace > right and line_height > 0:
+                x = rect.x() + m.left()
+                y = y + line_height + self._vspace
+                next_x = x + w + self._hspace
+                line_height = 0
+            if not test_only:
+                item.setGeometry(QRect(QPoint(x, y), QSize(w, h)))
+            x = next_x
+            line_height = max(line_height, h)
+        return y + line_height - rect.y() + m.bottom()
+
+
 class FilterBar(QWidget):
     """조건 콤보 7개 + 초기화 버튼. 조건 변경 시 changed 시그널 발행."""
 
@@ -46,11 +125,14 @@ class FilterBar(QWidget):
         self.setStyleSheet(
             f"FilterBar {{ background-color: {PANEL};"
             f"border-bottom: 1px solid {BORDER}; }}")
-        self.setFixedHeight(36)
+        # 폭이 좁아지면 필터 칩이 잘리지 않고 다음 줄로 접히도록 FlowLayout 사용.
+        # 부모 레이아웃이 줄바꿈된 높이를 반영하도록 heightForWidth를 켠다.
+        sp = QSizePolicy(QSizePolicy.Policy.Preferred,
+                         QSizePolicy.Policy.Minimum)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
 
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(8, 4, 8, 4)
-        layout.setSpacing(6)
+        layout = FlowLayout(self, margin=6, hspacing=8, vspacing=4)
 
         self._combos: list[QComboBox] = []
         self.period = self._add_combo(
@@ -75,7 +157,6 @@ class FilterBar(QWidget):
         self.reset_btn.setFixedHeight(24)
         self.reset_btn.clicked.connect(self.reset)
         layout.addWidget(self.reset_btn)
-        layout.addStretch()
 
     # ── 구성 헬퍼 ────────────────────────────────────────────────
 
@@ -84,20 +165,27 @@ class FilterBar(QWidget):
         """canonical→라벨 매핑 앞에 '전체'(None)를 붙인 콤보 항목 리스트."""
         return [(_ALL_LABEL, None)] + [(lbl, v) for v, lbl in label_map.items()]
 
-    def _add_combo(self, layout: QHBoxLayout, title: str,
+    def _add_combo(self, layout: QLayout, title: str,
                    items: list[tuple[str, str | None]],
                    width: int) -> QComboBox:
+        # 라벨+콤보를 한 칩으로 묶어 줄바꿈 시 분리되지 않게 한다.
+        chip = QWidget()
+        chip.setStyleSheet("background: transparent;")
+        h = QHBoxLayout(chip)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(4)
         lbl = QLabel(title)
         lbl.setStyleSheet(
             f"color: {TEXT2}; font-size: 11px; background: transparent;"
             "border: none;")
-        layout.addWidget(lbl)
+        h.addWidget(lbl)
         combo = QComboBox()
         combo.setFixedWidth(width)
         for label, value in items:
             combo.addItem(label, value)
         combo.currentIndexChanged.connect(self._emit_changed)
-        layout.addWidget(combo)
+        h.addWidget(combo)
+        layout.addWidget(chip)
         self._combos.append(combo)
         return combo
 

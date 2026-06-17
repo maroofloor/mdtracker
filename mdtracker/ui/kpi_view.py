@@ -203,7 +203,23 @@ class KpiView(QWidget):
         self.refresh()
 
     def _build(self) -> None:
-        root = QVBoxLayout(self)
+        # 요약 탭 본문 전체를 하나의 바깥 스크롤로 감싼다.
+        # (고DPI 200% 등에서 본문이 뷰포트보다 길어지면 상단 위젯이 압축돼
+        #  글자가 잘리던 문제 방지 — 부족하면 잘리지 않고 스크롤된다.)
+        outer = QVBoxLayout(self)
+        outer.setContentsMargins(0, 0, 0, 0)
+        self._scroll = QScrollArea()
+        self._scroll.setWidgetResizable(True)
+        self._scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        self._scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self._scroll.setStyleSheet("background: transparent;")
+        content = QWidget()
+        content.setStyleSheet("background: transparent;")
+        self._scroll.setWidget(content)
+        outer.addWidget(self._scroll)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(12)
 
@@ -331,18 +347,16 @@ class KpiView(QWidget):
             f"color:{TEXT2}; font-size:15px; font-weight:600;")
         root.addWidget(deck_title)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
-        scroll.setStyleSheet("background: transparent;")
+        # 바깥 스크롤이 전체를 스크롤하므로 덱 리스트는 내부 스크롤 없이
+        # 본문에 직접 쌓는다(중첩 스크롤 제거).
         deck_container = QWidget()
         deck_container.setStyleSheet("background: transparent;")
         self._deck_box = QVBoxLayout(deck_container)
         self._deck_box.setContentsMargins(0, 0, 0, 0)
         self._deck_box.setSpacing(6)
         self._deck_box.addStretch(1)
-        scroll.setWidget(deck_container)
-        root.addWidget(scroll, 1)
+        root.addWidget(deck_container)
+        root.addStretch(1)
 
     # ── 목표 밴드 빌드 ───────────────────────────────────────────
 

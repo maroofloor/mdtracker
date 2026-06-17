@@ -39,7 +39,8 @@ class DonutGauge(QWidget):
         self._anim = QPropertyAnimation(self, b"animRate", self)
         self._anim.setDuration(650)
         self._anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        self.setMinimumSize(size, size)
+        # 고정 크기 — 본문이 좁아도 도넛이 압축돼 잘리지 않도록 한다.
+        self.setFixedSize(size, size)
         try:
             theme.theme_notifier.changed.connect(lambda *_: self.update())
         except Exception:

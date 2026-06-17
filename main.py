@@ -16,7 +16,7 @@ try:
 except ImportError:
     pass
 
-from PySide6.QtCore import QtMsgType, qInstallMessageHandler
+from PySide6.QtCore import Qt, QtMsgType, qInstallMessageHandler
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -45,6 +45,11 @@ def main() -> None:
     qInstallMessageHandler(_qt_msg_handler)
     DB_PATH.parent.mkdir(parents=True, exist_ok=True)
     db = Database(DB_PATH)
+
+    # 분수 배율(125%/150% 등)에서 Qt 기본 반올림이 레이아웃 어긋남·글자 잘림을
+    # 유발할 수 있어 배율을 그대로 통과시킨다. QApplication 생성 전에 설정해야 한다.
+    QApplication.setHighDpiScaleFactorRoundingPolicy(
+        Qt.HighDpiScaleFactorRoundingPolicy.PassThrough)
 
     app = QApplication(sys.argv)
     # 작업표시줄은 작은 크기 아이콘을 요구하므로 다중 크기를 담은 .ico를 우선 사용한다.
